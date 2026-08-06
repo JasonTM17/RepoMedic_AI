@@ -25,7 +25,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run generate:api-client
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
       - uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: fs
