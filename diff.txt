@@ -1,0 +1,583 @@
+diff --git a/package-lock.json b/package-lock.json
+index 786ac4a..362702b 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -5757,6 +5757,15 @@
+         "url": "https://github.com/sponsors/sindresorhus"
+       }
+     },
++    "node_modules/zod": {
++      "version": "4.4.3",
++      "resolved": "https://registry.npmjs.org/zod/-/zod-4.4.3.tgz",
++      "integrity": "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==",
++      "license": "MIT",
++      "funding": {
++        "url": "https://github.com/sponsors/colinhacks"
++      }
++    },
+     "packages/api-client": {
+       "name": "@repomedic/api-client",
+       "version": "0.1.0",
+@@ -5880,7 +5889,10 @@
+     },
+     "packages/core": {
+       "name": "@repomedic/core",
+-      "version": "0.1.0"
++      "version": "0.1.0",
++      "dependencies": {
++        "zod": "^4.4.3"
++      }
+     }
+   }
+ }
+diff --git a/packages/core/package.json b/packages/core/package.json
+index 3de1919..6908603 100644
+--- a/packages/core/package.json
++++ b/packages/core/package.json
+@@ -13,6 +13,10 @@
+   },
+   "scripts": {
+     "build": "tsc -p tsconfig.build.json",
+-    "typecheck": "tsc --noEmit"
++    "typecheck": "tsc --noEmit",
++    "test": "vitest run"
++  },
++  "dependencies": {
++    "zod": "^4.4.3"
+   }
+ }
+diff --git a/packages/core/src/domain/index.ts b/packages/core/src/domain/index.ts
+new file mode 100644
+index 0000000..e6cef52
+--- /dev/null
++++ b/packages/core/src/domain/index.ts
+@@ -0,0 +1,73 @@
++// Enums as const tuples
++export const PATCH_OPERATION_KINDS = [
++  "create",
++  "modify",
++  "delete",
++  "rename",
++  "chmod",
++] as const;
++export type PatchOperationKind = (typeof PATCH_OPERATION_KINDS)[number];
++
++export const POLICY_VIOLATION_REASONS = [
++  "absolute_path",
++  "path_traversal",
++  "empty_path",
++  "denied_directory",
++  "denied_file",
++  "denied_extension",
++  "unsupported_operation",
++  "not_in_allowlist",
++] as const;
++export type PolicyViolationReason = (typeof POLICY_VIOLATION_REASONS)[number];
++
++// Entities
++export interface RepositoryTarget {
++  path: string; // The root path of the repository
++  branch?: string | undefined;
++  commit?: string | undefined;
++}
++
++export interface DiagnosisIssue {
++  id: string;
++  description: string;
++  filePaths: string[];
++}
++
++export interface PatchOperation {
++  kind: PatchOperationKind;
++  path: string; // Target file path (relative to repo root)
++  content?: string | undefined; // Used for 'create' and 'modify'
++  oldPath?: string | undefined; // Used for 'rename'
++  mode?: number | undefined; // Used for 'chmod'
++}
++
++export interface PatchProposal {
++  id: string;
++  operations: PatchOperation[];
++  humanApprovalRequired: boolean;
++}
++
++export interface CheckResult {
++  success: boolean;
++  output: string;
++  errors?: string[] | undefined;
++}
++
++export interface Approval {
++  proposalId: string;
++  approved: boolean;
++  reason?: string | undefined;
++}
++
++export interface PolicyViolation {
++  path: string;
++  reason: PolicyViolationReason;
++  details?: string | undefined;
++}
++
++export interface MutationDecision {
++  allowed: boolean;
++  policyVersion: string;
++  reason?: string | undefined;
++  violations: PolicyViolation[];
++}
+diff --git a/packages/core/src/index.ts b/packages/core/src/index.ts
+index 3731b90..d96641d 100644
+--- a/packages/core/src/index.ts
++++ b/packages/core/src/index.ts
+@@ -1,7 +1,4 @@
+-/**
+- * Describes the intentionally side-effect-free core package boundary.
+- * Workflow behavior is introduced in later phases.
+- */
+-export const corePackageName = "@repomedic/core";
+-
+-export const corePackageVersion = "0.1.0";
++export * from "./version.js";
++export * from "./domain/index.js";
++export * from "./schemas/index.js";
++export * from "./policy/index.js";
+diff --git a/packages/core/src/policy/index.ts b/packages/core/src/policy/index.ts
+new file mode 100644
+index 0000000..6f10f3b
+--- /dev/null
++++ b/packages/core/src/policy/index.ts
+@@ -0,0 +1,185 @@
++import {
++  PatchProposal,
++  MutationDecision,
++  PolicyViolation,
++  PolicyViolationReason,
++  PATCH_OPERATION_KINDS,
++} from "../domain/index.js";
++import { POLICY_VERSION } from "../version.js";
++
++export class PathAllowlistPolicy {
++  private allowedSegmentsList: string[][];
++
++  constructor(allowedPaths: string[]) {
++    this.allowedSegmentsList = allowedPaths.map((p) =>
++      this.normalizeToSegments(p),
++    );
++  }
++
++  private normalizeToSegments(p: string): string[] {
++    return p
++      .replace(/\\/g, "/")
++      .replace(/\/+/g, "/")
++      .split("/")
++      .filter((s) => s !== "" && s !== ".");
++  }
++
++  public validatePath(p: string): {
++    valid: boolean;
++    reason?: PolicyViolationReason;
++    details?: string;
++  } {
++    if (!p) {
++      return { valid: false, reason: "empty_path" };
++    }
++
++    if (
++      p.startsWith("/") ||
++      /^[a-zA-Z]:/.test(p) ||
++      p.startsWith("\\\\") ||
++      p.startsWith("//")
++    ) {
++      return { valid: false, reason: "absolute_path" };
++    }
++
++    const segments = this.normalizeToSegments(p);
++
++    if (segments.some((s) => s === "..")) {
++      return { valid: false, reason: "path_traversal" };
++    }
++
++    if (segments.length === 0) {
++      return { valid: false, reason: "empty_path" };
++    }
++
++    // Root confinement is intrinsically handled if we only match against the allowlist.
++    let allowed = false;
++    for (const allowedSegments of this.allowedSegmentsList) {
++      // Is allowedSegments a prefix of segments?
++      if (allowedSegments.length <= segments.length) {
++        let match = true;
++        for (let i = 0; i < allowedSegments.length; i++) {
++          if (segments[i] !== allowedSegments[i]) {
++            match = false;
++            break;
++          }
++        }
++        if (match) {
++          allowed = true;
++          break;
++        }
++      }
++    }
++
++    if (!allowed) {
++      return { valid: false, reason: "not_in_allowlist" };
++    }
++
++    return { valid: true };
++  }
++}
++
++export class MutationPolicy {
++  constructor(private readonly pathAllowlist: PathAllowlistPolicy) {}
++
++  public evaluate(proposal: PatchProposal): MutationDecision {
++    const violations: PolicyViolation[] = [];
++
++    for (const op of proposal.operations) {
++      // 1. Allowed kinds
++      if (!PATCH_OPERATION_KINDS.includes(op.kind as any)) {
++        violations.push({
++          path: op.path,
++          reason: "unsupported_operation",
++          details: `Unknown operation kind: ${op.kind}`,
++        });
++        continue;
++      }
++
++      // We need to check both path and oldPath (if rename)
++      const pathsToCheck = [op.path];
++      if (op.kind === "rename" && op.oldPath) {
++        pathsToCheck.push(op.oldPath);
++      }
++
++      for (const p of pathsToCheck) {
++        // 2. Allowlist gate
++        const allowlistCheck = this.pathAllowlist.validatePath(p);
++        if (!allowlistCheck.valid) {
++          violations.push({
++            path: p,
++            reason: allowlistCheck.reason!,
++            details: allowlistCheck.details,
++          });
++          continue;
++        }
++
++        // 3. Denylist
++        const segments = p
++          .replace(/\\/g, "/")
++          .replace(/\/+/g, "/")
++          .split("/")
++          .filter((s) => s !== "" && s !== ".");
++        const filename = segments[segments.length - 1] ?? "";
++
++        // .git/
++        if (segments.some((s) => s === ".git")) {
++          violations.push({
++            path: p,
++            reason: "denied_directory",
++            details: "Modifying .git directory is forbidden",
++          });
++          continue;
++        }
++
++        // .env*
++        if (filename.startsWith(".env")) {
++          violations.push({
++            path: p,
++            reason: "denied_file",
++            details: "Modifying .env files is forbidden",
++          });
++          continue;
++        }
++
++        // credentials/secrets
++        const lowerPath = p.toLowerCase();
++        if (lowerPath.includes("credential") || lowerPath.includes("secret")) {
++          violations.push({
++            path: p,
++            reason: "denied_file",
++            details: "Modifying secret/credential files is forbidden",
++          });
++          continue;
++        }
++
++        // 4. chmod executable on non-scripts
++        if (op.kind === "chmod" && op.mode !== undefined) {
++          const isExecutable = (op.mode & 0o111) !== 0;
++          if (isExecutable) {
++            const isScript =
++              filename.endsWith(".sh") ||
++              filename.endsWith(".py") ||
++              filename.endsWith(".js") ||
++              filename.endsWith(".ts");
++            if (!isScript) {
++              violations.push({
++                path: p,
++                reason: "denied_extension",
++                details: "Cannot set executable bit on non-script files",
++              });
++              continue;
++            }
++          }
++        }
++      }
++    }
++
++    return {
++      allowed: violations.length === 0,
++      policyVersion: POLICY_VERSION,
++      reason: violations.length > 0 ? "Policy violations detected" : undefined,
++      violations,
++    };
++  }
++}
+diff --git a/packages/core/src/schemas/index.ts b/packages/core/src/schemas/index.ts
+new file mode 100644
+index 0000000..f3d6070
+--- /dev/null
++++ b/packages/core/src/schemas/index.ts
+@@ -0,0 +1,68 @@
++import { z } from "zod";
++import {
++  PATCH_OPERATION_KINDS,
++  POLICY_VIOLATION_REASONS,
++  RepositoryTarget,
++  DiagnosisIssue,
++  PatchOperation,
++  PatchProposal,
++  CheckResult,
++  Approval,
++  PolicyViolation,
++  MutationDecision,
++} from "../domain/index.js";
++
++export const RepositoryTargetSchema = z.object({
++  path: z.string(),
++  branch: z.string().optional(),
++  commit: z.string().optional(),
++}) satisfies z.ZodType<RepositoryTarget>;
++
++export const DiagnosisIssueSchema = z.object({
++  id: z.string(),
++  description: z.string(),
++  filePaths: z.array(z.string()),
++}) satisfies z.ZodType<DiagnosisIssue>;
++
++export const PatchOperationKindSchema = z.enum(PATCH_OPERATION_KINDS);
++
++export const PatchOperationSchema = z.object({
++  kind: PatchOperationKindSchema,
++  path: z.string(),
++  content: z.string().optional(),
++  oldPath: z.string().optional(),
++  mode: z.number().optional(),
++}) satisfies z.ZodType<PatchOperation>;
++
++export const PatchProposalSchema = z.object({
++  id: z.string(),
++  operations: z.array(PatchOperationSchema),
++  humanApprovalRequired: z.boolean(),
++}) satisfies z.ZodType<PatchProposal>;
++
++export const CheckResultSchema = z.object({
++  success: z.boolean(),
++  output: z.string(),
++  errors: z.array(z.string()).optional(),
++}) satisfies z.ZodType<CheckResult>;
++
++export const ApprovalSchema = z.object({
++  proposalId: z.string(),
++  approved: z.boolean(),
++  reason: z.string().optional(),
++}) satisfies z.ZodType<Approval>;
++
++export const PolicyViolationReasonSchema = z.enum(POLICY_VIOLATION_REASONS);
++
++export const PolicyViolationSchema = z.object({
++  path: z.string(),
++  reason: PolicyViolationReasonSchema,
++  details: z.string().optional(),
++}) satisfies z.ZodType<PolicyViolation>;
++
++export const MutationDecisionSchema = z.object({
++  allowed: z.boolean(),
++  policyVersion: z.string(),
++  reason: z.string().optional(),
++  violations: z.array(PolicyViolationSchema),
++}) satisfies z.ZodType<MutationDecision>;
+diff --git a/packages/core/src/version.ts b/packages/core/src/version.ts
+new file mode 100644
+index 0000000..7f57145
+--- /dev/null
++++ b/packages/core/src/version.ts
+@@ -0,0 +1,5 @@
++export const corePackageName = "@repomedic/core";
++export const corePackageVersion = "0.1.0";
++export const VERSION = "0.1.0";
++export const POLICY_VERSION = "1.0.0";
++export const SCHEMA_VERSION = "1.0.0";
+diff --git a/packages/core/tests/policy.unit.test.ts b/packages/core/tests/policy.unit.test.ts
+new file mode 100644
+index 0000000..c14f55a
+--- /dev/null
++++ b/packages/core/tests/policy.unit.test.ts
+@@ -0,0 +1,117 @@
++import { describe, it, expect } from "vitest";
++import { PathAllowlistPolicy, MutationPolicy } from "../src/policy/index.js";
++
++describe("PathAllowlistPolicy", () => {
++  it("allows matching path", () => {
++    const policy = new PathAllowlistPolicy(["src", "docs"]);
++    expect(policy.validatePath("src/main.ts").valid).toBe(true);
++    expect(policy.validatePath("docs/index.md").valid).toBe(true);
++    expect(policy.validatePath("src").valid).toBe(true);
++  });
++
++  it("rejects absolute paths", () => {
++    const policy = new PathAllowlistPolicy(["src"]);
++    expect(policy.validatePath("/src/main.ts").valid).toBe(false);
++    expect(policy.validatePath("C:/src/main.ts").valid).toBe(false);
++    expect(policy.validatePath("\\\\UNC\\path").valid).toBe(false);
++  });
++
++  it("rejects directory traversal", () => {
++    const policy = new PathAllowlistPolicy(["src"]);
++    expect(policy.validatePath("src/../secret").valid).toBe(false);
++  });
++
++  it("rejects sibling prefix (e.g. core-evil)", () => {
++    const policy = new PathAllowlistPolicy(["core"]);
++    expect(policy.validatePath("core-evil/test").valid).toBe(false);
++  });
++
++  it("rejects empty paths", () => {
++    const policy = new PathAllowlistPolicy(["src"]);
++    expect(policy.validatePath("").valid).toBe(false);
++    expect(policy.validatePath("./.").valid).toBe(false); // resolves to empty segments
++  });
++});
++
++describe("MutationPolicy", () => {
++  const allowlist = new PathAllowlistPolicy(["src", "docs"]);
++  const policy = new MutationPolicy(allowlist);
++
++  it("allows valid operations", () => {
++    const decision = policy.evaluate({
++      id: "1",
++      humanApprovalRequired: false,
++      operations: [{ kind: "modify", path: "src/main.ts", content: "hello" }],
++    });
++    expect(decision.allowed).toBe(true);
++  });
++
++  it("rejects unknown kinds", () => {
++    const decision = policy.evaluate({
++      id: "1",
++      humanApprovalRequired: false,
++      operations: [{ kind: "magic" as any, path: "src/main.ts" }],
++    });
++    expect(decision.allowed).toBe(false);
++    expect(decision.violations[0]?.reason).toBe("unsupported_operation");
++  });
++
++  it("rejects .git modification", () => {
++    const decision = policy.evaluate({
++      id: "1",
++      humanApprovalRequired: false,
++      operations: [{ kind: "modify", path: "src/.git/config" }],
++    });
++    expect(decision.allowed).toBe(false);
++    expect(decision.violations[0]?.reason).toBe("denied_directory");
++  });
++
++  it("rejects .env modification", () => {
++    const decision = policy.evaluate({
++      id: "1",
++      humanApprovalRequired: false,
++      operations: [{ kind: "modify", path: "src/.env.local" }],
++    });
++    expect(decision.allowed).toBe(false);
++    expect(decision.violations[0]?.reason).toBe("denied_file");
++  });
++
++  it("rejects secret/credential paths", () => {
++    const decision = policy.evaluate({
++      id: "1",
++      humanApprovalRequired: false,
++      operations: [{ kind: "modify", path: "src/aws-credentials.json" }],
++    });
++    expect(decision.allowed).toBe(false);
++    expect(decision.violations[0]?.reason).toBe("denied_file");
++  });
++
++  it("rejects chmod executable on non-scripts", () => {
++    const decision = policy.evaluate({
++      id: "1",
++      humanApprovalRequired: false,
++      operations: [{ kind: "chmod", path: "src/data.json", mode: 0o755 }],
++    });
++    expect(decision.allowed).toBe(false);
++    expect(decision.violations[0]?.reason).toBe("denied_extension");
++  });
++
++  it("allows chmod executable on scripts", () => {
++    const decision = policy.evaluate({
++      id: "1",
++      humanApprovalRequired: false,
++      operations: [{ kind: "chmod", path: "src/build.sh", mode: 0o755 }],
++    });
++    expect(decision.allowed).toBe(true);
++  });
++
++  it("rejects unallowed path", () => {
++    const decision = policy.evaluate({
++      id: "1",
++      humanApprovalRequired: false,
++      operations: [{ kind: "modify", path: "root2/test.ts" }],
++    });
++    expect(decision.allowed).toBe(false);
++    expect(decision.violations[0]?.reason).toBe("not_in_allowlist");
++  });
++});
+diff --git a/packages/core/tests/purity.unit.test.ts b/packages/core/tests/purity.unit.test.ts
+new file mode 100644
+index 0000000..f92f0ad
+--- /dev/null
++++ b/packages/core/tests/purity.unit.test.ts
+@@ -0,0 +1,35 @@
++import { describe, it, expect } from "vitest";
++import * as fs from "fs";
++import * as path from "path";
++
++describe("Purity Gate", () => {
++  it("core should not import node builtins", () => {
++    // This is a naive AST-free check using regex on source files.
++    // In a real codebase, a linter handles this, but a test was requested.
++    const srcDir = path.join(__dirname, "../src");
++
++    function walk(dir: string, files: string[] = []) {
++      const entries = fs.readdirSync(dir, { withFileTypes: true });
++      for (const entry of entries) {
++        const fullPath = path.join(dir, entry.name);
++        if (entry.isDirectory()) walk(fullPath, files);
++        else if (entry.isFile() && fullPath.endsWith(".ts"))
++          files.push(fullPath);
++      }
++      return files;
++    }
++
++    const tsFiles = walk(srcDir);
++    const forbidden =
++      /from\s+['"](fs|path|child_process|net|http|node:[^'"]+)['"]/g;
++
++    for (const file of tsFiles) {
++      const content = fs.readFileSync(file, "utf-8");
++      const matches = [...content.matchAll(forbidden)];
++      expect(
++        matches,
++        `File ${file} contains forbidden node imports`,
++      ).toHaveLength(0);
++    }
++  });
++});

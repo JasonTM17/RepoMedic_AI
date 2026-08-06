@@ -37,7 +37,7 @@ describe('Explorer Agent', () => {
     });
     
     expect(result.issues).toHaveLength(1);
-    expect(result.issues[0].id).toBe('issue-1');
+    expect(result.issues[0]!.id).toBe('issue-1');
     expect(result.stopped).toBe('done');
   });
   

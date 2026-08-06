@@ -12,7 +12,7 @@ export interface ExplorerAgentOptions {
   target: RepositoryTarget;
   issueDescription: string;
   allowlist: readonly string[];
-  maxIterations?: number; // default 10
+  maxIterations?: number | undefined; // default 10
 }
 
 export interface ExplorerAgentResult {

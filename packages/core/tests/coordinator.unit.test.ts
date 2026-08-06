@@ -39,6 +39,6 @@ describe('Coordinator', () => {
     expect(result.proposal!.status).toBe('draft');
     expect(result.proposal!.humanApprovalRequired).toBe(true);
     expect(result.proposal!.operations).toHaveLength(1);
-    expect(result.proposal!.operations[0].path).toBe('src/main.ts');
+    expect(result.proposal!.operations[0]!.path).toBe('src/main.ts');
   });
 });
