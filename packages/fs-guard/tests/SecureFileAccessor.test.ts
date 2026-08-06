@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { SecureFileAccessor, PathAllowlistPolicy } from "../src/SecureFileAccessor.js";
+import { SecureFileAccessor } from "../src/SecureFileAccessor.js";
+import type { PathAllowlistPolicy } from "../src/SecureFileAccessor.js";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";

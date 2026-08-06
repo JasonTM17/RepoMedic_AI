@@ -18,6 +18,6 @@ export * from "./approval/index.js";
 export * from "./tracing/index.js";
 
 /** @deprecated use {@link packageVersion} */
-export const corePackageName = "@repomedic/core";
+export const corePackageName = "@jasonTM17/core";
 /** @deprecated use the packageVersion export from version.js */
 export const corePackageVersion = "0.1.0";

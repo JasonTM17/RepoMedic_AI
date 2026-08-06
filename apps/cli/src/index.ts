@@ -56,7 +56,7 @@ export function createProgram(): Command {
 
         // Dynamically import core (keeps the CLI usable from a pre-built core)
         const { createModelAdapter, runCoordinator, ApprovalCheckpoint } =
-          await import("@repomedic/core");
+          await import("@jasonTM17/core");
 
         const model = createModelAdapter({
           backend,

@@ -21,9 +21,10 @@ RULES.md
 .env.*
 !.env.example
 !.env.production.example
+.npmrc
 *.local
 *.local.*
-!docker-compose.local.yml
+!.docker-compose.local.yml
 *.private.md
 *.pem
 *.key
