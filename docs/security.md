@@ -4,18 +4,42 @@ RepoMedic prioritizes security by design, ensuring that the AI agent operates st
 
 ## Key Security Components
 
-### PathAllowlistPolicy
+### PathAllowlistPolicy (packages/core)
 
-Restricts file system access to a predefined list of directories and files. The agent cannot read or modify files outside of this allowlist, protecting sensitive user data and system configurations.
+The foundational path validation policy. Normalizes paths (POSIX + Windows), rejects absolute paths, drive letters, UNC paths, and `..` traversal. Enforces component-exact allowlist matching and root confinement.
 
-### MutationPolicy
+### MutationPolicy (packages/core)
 
-Defines rules for modifying files. It ensures that changes are only permitted in safe contexts and often requires explicit user approval before any destructive or modifying operations are executed on the real file system.
+Defines rules for modifying files. Enforces allowed operation kinds, allowlist gate, and denylist for protected paths (`.git/`, `.env*`, credentials). Controls `humanApprovalRequired` passthrough and returns `MutationDecision` with policy violations.
 
-### SecureFileSystem (Realpath Confinement)
+### SecureFileAccessor (packages/fs-guard)
 
-A secure wrapper around file system operations that performs realpath resolution and checks against the `PathAllowlistPolicy`. It prevents directory traversal attacks (e.g., using `../`) by ensuring all resolved paths fall within the permitted boundaries.
+A stateful, secure wrapper around `fs/promises`. Performs realpath resolution via `fs.realpath` and re-validates against the `PathAllowlistPolicy` to guarantee the actual path remains confined inside the repository root. Prevents TOCTOU attacks and symlink escape attempts.
 
-### BoundedExec
+Key behaviors:
+- Resolves all paths using `fs.realpath` before validation
+- Rejects any resolved path that escapes the repository root
+- Blocks access to `.git/`, `.env`, and other protected paths
+- Provides: `readFile`, `writeFile`, `listFiles`, `statFile`
 
-A confined execution environment for running scripts or commands. It limits the execution time, resource usage, and potentially the network access of commands invoked by the agent or during the testing phase of generated patches. This ensures that arbitrary code execution is isolated and controlled.
+### SecureCommandRunner (packages/exec-guard)
+
+A confined execution environment for running Git commands, linters, formatters, and test suites.
+
+Key behaviors:
+- Enforces strict working directory confinement (repository root or valid subdirectory)
+- Uses `child_process.spawn` with explicit argument arrays (no shell injection)
+- Implements process timeouts with SIGTERM/SIGKILL for runaway tasks
+- Limits stdout/stderr buffer sizes to prevent out-of-memory crashes
+- Sanitizes environment variables (only explicit allowlist variables inherited)
+- Enforces max output bytes with truncation
+
+## Security Boundaries
+
+| Component | Protection |
+|-----------|------------|
+| File Access | TOCTOU-safe realpath + allowlist |
+| Path Traversal | Reject `../`, absolute paths, symlink escapes |
+| Command Execution | No shell, cwd confinement, timeout enforcement |
+| Environment | Explicit allowlist only, no full inheritance |
+| Output Size | Configurable max bytes with truncation |

@@ -1,6 +1,7 @@
 # User-managed and private automation context
 .claude/
 .claude-private/
+.commandcode/
 .private/
 plans/
 PLAN*.md
