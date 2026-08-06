@@ -36,15 +36,13 @@ function isTraversal(path: string): boolean {
   return path.split("/").includes("..");
 }
 
-/** Components that can alias a traversal or `.git` on some platforms. */
-const UNSAFE_COMPONENT_PATTERNS = [
-  /^\.\.$/,
-  /^\.\.\s+/,
-  /^\.\.$/,
-  /\.\.$/,
-  /%2e/i,
-  /%00/,
-];
+/**
+ * Components that can alias a traversal or `.git` on some platforms.
+ * Percent-encoding is rejected wholesale in path components: a layer that
+ * URL-decodes later would turn `%2e%2e` / `%2f` into `..` / `/`, so the
+ * syntactic policy refuses any `%` before that can happen.
+ */
+const UNSAFE_COMPONENT_PATTERNS = [/^\.\.$/, /^\.\.\s+/, /\.\.$/, /%/];
 
 function hasUnsafeComponent(path: string): boolean {
   const components = path.split("/");
