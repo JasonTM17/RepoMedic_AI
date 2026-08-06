@@ -7,27 +7,27 @@
  * 3. Dry-run completes: coordinator produces a plan without error
  */
 
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
 
 // Import core directly from source
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const FIXTURE_ROOT = resolve(__dirname, '../fixtures/task-api');
-
+const FIXTURE_ROOT = resolve(__dirname, "../fixtures/task-api");
 
 async function main() {
-  process.stdout.write('=== RepoMedic Evaluation Suite ===\n\n');
+  process.stdout.write("=== RepoMedic Evaluation Suite ===\n\n");
 
-  const { createModelAdapter, runCoordinator } = await import('../packages/core/src/index.js');
+  const { createModelAdapter, runCoordinator } =
+    await import("../packages/core/src/index.js");
 
   const model = createModelAdapter({
-    backend: 'fake',
+    backend: "fake",
     responses: [
       // Explorer iteration 1: list dir
-      'TOOL:listDir:.',
+      "TOOL:listDir:.",
       // Explorer iteration 2: read a file
-      'TOOL:readFile:src/task-store.ts',
+      "TOOL:readFile:src/task-store.ts",
       // Explorer iteration 3: diagnose
       'DIAGNOSIS:[{"id":"bug-1","severity":"high","confidence":0.9,"description":"nextId starts at 0 instead of 1","evidence":["let nextId = 0;"],"relatedFiles":["src/task-store.ts"],"file":"src/task-store.ts"}]',
     ],
@@ -35,7 +35,7 @@ async function main() {
 
   const target = {
     rootPath: FIXTURE_ROOT,
-    branch: 'main',
+    branch: "main",
   };
 
   let passed = 0;
@@ -52,43 +52,49 @@ async function main() {
         failed++;
       }
     } catch (err) {
-      process.stdout.write(`  ERROR ${name}: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.stdout.write(
+        `  ERROR ${name}: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
       failed++;
     }
   }
 
   // Eval 1: Coordinator runs without error
   let coordResult: Awaited<ReturnType<typeof runCoordinator>> | null = null;
-  await grade('Coordinator runs without throwing', async () => {
+  await grade("Coordinator runs without throwing", async () => {
     coordResult = await runCoordinator({
       model,
       target,
-      issueDescription: 'Find and report all bugs in the task API',
-      allowlist: ['src'],
+      issueDescription: "Find and report all bugs in the task API",
+      allowlist: ["src"],
     });
     return true;
   });
 
   // Eval 2: Explorer found at least one issue
-  await grade('Explorer identified at least 1 issue', async () => {
+  await grade("Explorer identified at least 1 issue", async () => {
     return (coordResult?.issues.length ?? 0) >= 1;
   });
 
   // Eval 3: Proposal has humanApprovalRequired=true
-  await grade('Proposal requires human approval (policy gate)', async () => {
+  await grade("Proposal requires human approval (policy gate)", async () => {
     return coordResult?.proposal?.humanApprovalRequired === true;
   });
 
   // Eval 4: Proposal status is draft (not auto-applied)
-  await grade('Proposal is in draft status (not auto-applied)', async () => {
-    return coordResult?.proposal?.status === 'draft';
+  await grade("Proposal is in draft status (not auto-applied)", async () => {
+    return coordResult?.proposal?.status === "draft";
   });
 
-  process.stdout.write(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
+  process.stdout.write(
+    `\n=== Results: ${passed} passed, ${failed} failed ===\n`,
+  );
   process.exit(failed > 0 ? 1 : 0);
 }
 
-main().catch(err => {
-  process.stderr.write(`Eval suite crashed: ${err instanceof Error ? err.message : String(err)}\n`);
+main().catch((err) => {
+  process.stderr.write(
+    `Eval suite crashed: ${err instanceof Error ? err.message : String(err)}\n`,
+  );
   process.exit(1);
 });

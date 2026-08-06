@@ -47,7 +47,10 @@ describe("SecureFileAccessor", () => {
     await fs.writeFile(testFile, "hello");
 
     const policy = new MockPolicy(["*"]);
-    const accessor = new SecureFileAccessor(rootDir, policy as unknown as PathAllowlistPolicy);
+    const accessor = new SecureFileAccessor(
+      rootDir,
+      policy as unknown as PathAllowlistPolicy,
+    );
 
     const content = await accessor.readFile("test.txt");
     expect(content).toBe("hello");
@@ -55,7 +58,10 @@ describe("SecureFileAccessor", () => {
 
   it("should write a valid file", async () => {
     const policy = new MockPolicy(["*"]);
-    const accessor = new SecureFileAccessor(rootDir, policy as unknown as PathAllowlistPolicy);
+    const accessor = new SecureFileAccessor(
+      rootDir,
+      policy as unknown as PathAllowlistPolicy,
+    );
 
     await accessor.writeFile("out.txt", "world");
 
@@ -65,7 +71,10 @@ describe("SecureFileAccessor", () => {
 
   it("should block path traversal outside root", async () => {
     const policy = new MockPolicy(["*"]);
-    const accessor = new SecureFileAccessor(rootDir, policy as unknown as PathAllowlistPolicy);
+    const accessor = new SecureFileAccessor(
+      rootDir,
+      policy as unknown as PathAllowlistPolicy,
+    );
 
     await expect(accessor.readFile("../outside/test.txt")).rejects.toThrow(
       /Path traversal attempt detected|escapes repository root/,
@@ -89,7 +98,10 @@ describe("SecureFileAccessor", () => {
     }
 
     const policy = new MockPolicy(["*"]);
-    const accessor = new SecureFileAccessor(rootDir, policy as unknown as PathAllowlistPolicy);
+    const accessor = new SecureFileAccessor(
+      rootDir,
+      policy as unknown as PathAllowlistPolicy,
+    );
 
     await expect(accessor.readFile("link.txt")).rejects.toThrow(
       /escapes repository root/,
@@ -101,7 +113,10 @@ describe("SecureFileAccessor", () => {
     await fs.writeFile(envFile, "SECRET=1");
 
     const policy = new MockPolicy(["*"]);
-    const accessor = new SecureFileAccessor(rootDir, policy as unknown as PathAllowlistPolicy);
+    const accessor = new SecureFileAccessor(
+      rootDir,
+      policy as unknown as PathAllowlistPolicy,
+    );
 
     await expect(accessor.readFile(".env")).rejects.toThrow(
       /Path denied by policy/,
@@ -110,7 +125,10 @@ describe("SecureFileAccessor", () => {
 
   it("should handle writing to a non-existent file", async () => {
     const policy = new MockPolicy(["*"]);
-    const accessor = new SecureFileAccessor(rootDir, policy as unknown as PathAllowlistPolicy);
+    const accessor = new SecureFileAccessor(
+      rootDir,
+      policy as unknown as PathAllowlistPolicy,
+    );
 
     await expect(
       accessor.writeFile("new-dir/file.txt", "test"),
@@ -119,6 +137,3 @@ describe("SecureFileAccessor", () => {
     // The test is just checking resolve doesn"t break.
   });
 });
-
-
-

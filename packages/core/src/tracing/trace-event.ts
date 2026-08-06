@@ -1,16 +1,16 @@
 export type TraceEventKind =
-  | 'agent.start'
-  | 'agent.complete'
-  | 'agent.error'
-  | 'tool.call'
-  | 'tool.result'
-  | 'workflow.start'
-  | 'workflow.complete'
-  | 'workflow.error'
-  | 'approval.requested'
-  | 'approval.received'
-  | 'check.start'
-  | 'check.complete';
+  | "agent.start"
+  | "agent.complete"
+  | "agent.error"
+  | "tool.call"
+  | "tool.result"
+  | "workflow.start"
+  | "workflow.complete"
+  | "workflow.error"
+  | "approval.requested"
+  | "approval.received"
+  | "check.start"
+  | "check.complete";
 
 export interface TraceEvent {
   /** Monotonically increasing index within this trace session. */

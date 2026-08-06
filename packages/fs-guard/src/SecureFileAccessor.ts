@@ -123,7 +123,3 @@ export class SecureFileAccessor {
     return fs.stat(safePath);
   }
 }
-
-
-
-

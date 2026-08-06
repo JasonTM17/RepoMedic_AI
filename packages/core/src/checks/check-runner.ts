@@ -1,5 +1,5 @@
-import { boundedExec } from '../process/index.js';
-import type { CheckResult } from '../domain/entities.js';
+import { boundedExec } from "../process/index.js";
+import type { CheckResult } from "../domain/entities.js";
 
 export interface CheckCommand {
   name: string;
@@ -9,9 +9,14 @@ export interface CheckCommand {
 }
 
 export const DEFAULT_CHECKS: CheckCommand[] = [
-  { name: 'typecheck', command: 'npm', args: ['run', 'typecheck'], timeoutMs: 60_000 },
-  { name: 'test', command: 'npm', args: ['test'], timeoutMs: 120_000 },
-  { name: 'lint', command: 'npm', args: ['run', 'lint'], timeoutMs: 30_000 },
+  {
+    name: "typecheck",
+    command: "npm",
+    args: ["run", "typecheck"],
+    timeoutMs: 60_000,
+  },
+  { name: "test", command: "npm", args: ["test"], timeoutMs: 120_000 },
+  { name: "lint", command: "npm", args: ["run", "lint"], timeoutMs: 30_000 },
 ];
 
 export async function runChecks(
@@ -31,7 +36,7 @@ export async function runChecks(
       results.push({
         id: `check-${cmd.name}-${Date.now()}`,
         checkName: cmd.name,
-        status: r.timedOut ? 'failed' : (passed ? 'passed' : 'failed'),
+        status: r.timedOut ? "failed" : passed ? "passed" : "failed",
         output: `${r.stdout}${r.stderr}`.slice(0, 8192), // 8KB cap
         durationMs,
       });
@@ -39,7 +44,7 @@ export async function runChecks(
       results.push({
         id: `check-${cmd.name}-${Date.now()}`,
         checkName: cmd.name,
-        status: 'failed',
+        status: "failed",
         output: err instanceof Error ? err.message : String(err),
         durationMs: Date.now() - start,
       });
