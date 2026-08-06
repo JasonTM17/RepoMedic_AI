@@ -2,6 +2,25 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 
+interface TriageOptions {
+  dryRun: boolean;
+  model: string;
+  allowlist: string;
+  maxRetries: string;
+  issue: string;
+}
+
+/** Parses a CLI flag value as a strictly positive integer, or throws. */
+function parsePositiveInteger(value: string, flagName: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(
+      `${flagName} must be a positive integer, got: "${value}"`,
+    );
+  }
+  return parsed;
+}
+
 export function createProgram(): Command {
   const program = new Command()
     .name("repomedic")
@@ -33,84 +52,119 @@ export function createProgram(): Command {
       "Issue description to investigate",
       "Investigate and fix all bugs",
     )
-    .action(
-      async (
-        repoPath: string,
-        options: {
-          dryRun: boolean;
-          model: string;
-          allowlist: string;
-          maxRetries: string;
-          issue: string;
-        },
-      ) => {
-        const root = resolve(repoPath);
-        const allowlist = options.allowlist.split(",").map((p) => p.trim());
-        const backend = options.model === "openai" ? "openai" : "fake";
-
-        process.stdout.write(`RepoMedic triage starting...\n`);
-        process.stdout.write(`Repository: ${root}\n`);
-        process.stdout.write(
-          `Model: ${backend}${options.dryRun ? " (dry-run)" : ""}\n`,
+    .action(async (repoPath: string, options: TriageOptions) => {
+      let maxRetries: number;
+      try {
+        maxRetries = parsePositiveInteger(options.maxRetries, "--max-retries");
+      } catch (err) {
+        process.stderr.write(
+          `${err instanceof Error ? err.message : String(err)}\n`,
         );
+        process.exitCode = 1;
+        return;
+      }
 
-        // Dynamically import core (keeps the CLI usable from a pre-built core)
-        const { createModelAdapter, runCoordinator, ApprovalCheckpoint } =
-          await import("@jasonTM17/core");
+      const root = resolve(repoPath);
+      const allowlist = options.allowlist.split(",").map((p) => p.trim());
+      const backend = options.model === "openai" ? "openai" : "fake";
 
-        const model = createModelAdapter({
-          backend,
-          responses: backend === "fake" ? ["DONE"] : [],
-        });
+      process.stdout.write(`RepoMedic triage starting...\n`);
+      process.stdout.write(`Repository: ${root}\n`);
+      process.stdout.write(
+        `Model: ${backend}${options.dryRun ? " (dry-run)" : ""}\n`,
+      );
 
-        const target = { rootPath: root };
+      // Dynamically import core (keeps the CLI usable from a pre-built core)
+      const {
+        createModelAdapter,
+        runCoordinator,
+        ApprovalCheckpoint,
+        runBoundedRetry,
+      } = await import("@jasonTM17/core");
 
-        process.stdout.write("Running repository explorer...\n");
-        const coordResult = await runCoordinator({
-          model,
-          target,
-          issueDescription: options.issue,
-          allowlist,
-        });
+      const model = createModelAdapter({
+        backend,
+        responses: backend === "fake" ? ["DONE"] : [],
+      });
 
-        process.stdout.write(
-          `\nDiagnosis complete. Found ${coordResult.issues.length} issue(s).\n`,
-        );
+      const target = { rootPath: root };
 
-        for (const issue of coordResult.issues) {
-          process.stdout.write(`  [${issue.severity}] ${issue.description}\n`);
-        }
+      process.stdout.write("Running repository explorer...\n");
+      const coordResult = await runCoordinator({
+        model,
+        target,
+        issueDescription: options.issue,
+        allowlist,
+      });
 
-        if (coordResult.issues.length === 0 || options.dryRun) {
-          if (options.dryRun)
-            process.stdout.write("\nDry-run mode: no patches applied.\n");
-          else
-            process.stdout.write(
-              "\nNo issues found. Repository looks healthy.\n",
-            );
-          return;
-        }
+      process.stdout.write(
+        `\nDiagnosis complete. Found ${coordResult.issues.length} issue(s).\n`,
+      );
 
-        if (!coordResult.proposal) {
-          process.stdout.write("\nNo patch proposal generated.\n");
-          return;
-        }
+      for (const issue of coordResult.issues) {
+        process.stdout.write(`  [${issue.severity}] ${issue.description}\n`);
+      }
 
-        // Human approval
-        const checkpoint = new ApprovalCheckpoint();
-        const approval = await checkpoint.requestApproval(coordResult.proposal);
-
-        if (approval.decision !== "approved") {
+      if (coordResult.issues.length === 0 || options.dryRun) {
+        if (options.dryRun)
+          process.stdout.write("\nDry-run mode: no patches applied.\n");
+        else
           process.stdout.write(
-            `\nApproval ${approval.decision}. No changes made.\n`,
+            "\nNo issues found. Repository looks healthy.\n",
           );
-          return;
-        }
+        return;
+      }
 
-        process.stdout.write("\nApproved. Applying patch...\n");
-        process.stdout.write("Patch applied successfully.\n");
-      },
-    );
+      if (!coordResult.proposal) {
+        process.stdout.write("\nNo patch proposal generated.\n");
+        return;
+      }
+
+      // Human approval
+      const checkpoint = new ApprovalCheckpoint();
+      const approval = await checkpoint.requestApproval(coordResult.proposal);
+
+      if (approval.decision !== "approved") {
+        process.stdout.write(
+          `\nApproval ${approval.decision}. No changes made.\n`,
+        );
+        return;
+      }
+
+      process.stdout.write(
+        `\nApproved. Applying patch (up to ${maxRetries} attempt(s))...\n`,
+      );
+
+      let retryResult;
+      try {
+        retryResult = await runBoundedRetry({
+          model,
+          proposal: coordResult.proposal,
+          issues: coordResult.issues,
+          approved: true,
+          root,
+          maxRetries,
+        });
+      } catch (err) {
+        process.stderr.write(
+          `\nPatch pipeline crashed: ${err instanceof Error ? err.message : String(err)}\n`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      if (retryResult.finalStatus === "applied") {
+        process.stdout.write(
+          `\nPatch applied successfully after ${retryResult.attempts} attempt(s).\n${retryResult.summary}\n`,
+        );
+        return;
+      }
+
+      process.stderr.write(
+        `\nPatch ${retryResult.finalStatus} after ${retryResult.attempts} attempt(s).\n${retryResult.summary}\n`,
+      );
+      process.exitCode = 1;
+    });
 
   return program;
 }
