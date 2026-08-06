@@ -46,7 +46,7 @@ export async function runBoundedRetry(options: BoundedRetryOptions): Promise<Bou
       proposal,
       issues,
       approved,
-      ...(previousFailures !== undefined ? { previousFailures } : {}),
+      ...(previousFailures !== undefined ? { previousFailures: previousFailures as string } : {}),
       maxIterations: 3,
     });
 
@@ -64,7 +64,7 @@ export async function runBoundedRetry(options: BoundedRetryOptions): Promise<Bou
       model,
       proposal,
       root,
-      ...(checksToRun !== undefined ? { checksToRun } : {}),
+      ...(checksToRun !== undefined ? { checksToRun: checksToRun as CheckCommand[] } : {}),
     });
 
     if (reviewResult.passed) {

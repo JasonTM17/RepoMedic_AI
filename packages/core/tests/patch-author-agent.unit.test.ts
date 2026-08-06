@@ -53,8 +53,8 @@ describe('Patch Author Agent', () => {
       approved: true,
     });
     expect(result.success).toBe(true);
-    expect(result.appliedOperations.length).toBe(1);
-    expect(result.appliedOperations[0]?.path).toBe('file.txt');
+    expect((result as any).appliedOperations.length).toBe(1);
+    expect((result as any).appliedOperations[0]?.path).toBe('file.txt');
   });
   
   it('stops at maxIterations if model keeps returning unrecognized', async () => {

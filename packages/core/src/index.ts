@@ -9,6 +9,13 @@ export * from "./model/index.js";
 export * from "./tools/repo/index.js";
 export * from "./tools/patch/index.js";
 export * from "./checks/index.js";
+export * from "./agents/explorer/index.js";
+export * from "./agents/patcher/index.js";
+export * from "./agents/reviewer/index.js";
+export * from "./workflows/retry/index.js";
+export * from "./workflows/coordinator/coordinator.js";
+export * from "./approval/index.js";
+export * from "./tracing/index.js";
 
 /** @deprecated use {@link packageVersion} */
 export const corePackageName = "@repomedic/core";
