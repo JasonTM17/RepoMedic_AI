@@ -1,0 +1,55 @@
+name: Publish Packages
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com/
+          scope: "@jasonTM17"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build packages
+        run: npm run build:core && npm run build:fs-guard && npm run build:exec-guard && npm run build:api-client
+
+      - name: Run tests
+        run: npm test
+
+      # Publish in dependency order: core → fs-guard/exec-guard → api-client
+      - name: Publish @jasonTM17/core
+        run: npm publish --workspace=@jasonTM17/core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish @jasonTM17/fs-guard
+        run: npm publish --workspace=@jasonTM17/fs-guard
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish @jasonTM17/exec-guard
+        run: npm publish --workspace=@jasonTM17/exec-guard
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish @jasonTM17/api-client
+        run: npm publish --workspace=@jasonTM17/api-client
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
