@@ -21,9 +21,9 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
+      - run: npm run build
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
       - run: npm run generate:api-client
       - uses: gitleaks/gitleaks-action@v3
       - uses: aquasecurity/trivy-action@v0.36.0
