@@ -20,10 +20,7 @@ export class FakeModelAdapter implements ModelAdapter {
     this.name = name ?? "fake";
   }
 
-  async complete(
-    messages: Message[],
-    options?: CompletionOptions,
-  ): Promise<string> {
+  async complete(_messages: Message[], _options?: CompletionOptions): Promise<string> {
     const nextResponse = this.responses.shift();
     if (nextResponse === undefined) {
       throw new FakeModelExhaustedError();

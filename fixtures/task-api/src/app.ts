@@ -37,7 +37,7 @@ export function createApp() {
     res.json(task);
   });
 
-  const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
+  const errorHandler: ErrorRequestHandler = (err: unknown, req: Request, res: Response, _next: NextFunction) => {
     res.status(500).json({ error: "Internal server error" });
   };
   app.use(errorHandler);
