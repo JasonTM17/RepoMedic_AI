@@ -118,6 +118,12 @@ describe("checkPathAllowlist", () => {
     expect(decision.allowed).toBe(false);
     expect(decision.violations[0]?.code).toBe("traversal");
   });
+
+  it("rejects backslash + percent-encoded traversal (mixed variant)", () => {
+    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "src\\..%2f..%2fetc");
+    expect(decision.allowed).toBe(false);
+    expect(decision.violations[0]?.code).toBe("traversal");
+  });
 });
 
 describe("isPathAllowed / isWithinRoot", () => {
@@ -130,6 +136,11 @@ describe("isPathAllowed / isWithinRoot", () => {
     expect(isWithinRoot("/repo", "/repo")).toBe(true);
     expect(isWithinRoot("/repo", "/repo/src/a.ts")).toBe(true);
     expect(isWithinRoot("/repo", "/repositories/other")).toBe(false);
+  });
+
+  it("handles a root with a trailing slash", () => {
+    expect(isWithinRoot("/repo/", "/repo/x")).toBe(true);
+    expect(isWithinRoot("/repo/", "/repo2/x")).toBe(false);
   });
 
   it("is component-exact (sibling roots never match)", () => {
