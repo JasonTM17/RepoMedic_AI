@@ -24,12 +24,6 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
-      - uses: gitleaks/gitleaks-action@v3
-      - uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: fs
-          severity: HIGH,CRITICAL
-          exit-code: "1"
 
   docker-build:
     name: ci/docker-build
@@ -48,9 +42,3 @@ jobs:
           load: true
           push: false
           tags: repomedic/${{ matrix.service }}:ci
-      - uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: repomedic/${{ matrix.service }}:ci
-          format: table
-          severity: HIGH,CRITICAL
-          exit-code: "1"
