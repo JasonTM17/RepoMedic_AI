@@ -38,10 +38,10 @@ export function createProgram(): Command {
       process.stdout.write(`Repository: ${root}\n`);
       process.stdout.write(`Model: ${backend}${options.dryRun ? ' (dry-run)' : ''}\n`);
 
-      // Dynamically import core to allow pre-build usage
+      // Dynamically import core (keeps the CLI usable from a pre-built core)
       const { createModelAdapter, runCoordinator, ApprovalCheckpoint } = await import(
-        '../../packages/core/src/index.js'
-      ).catch(() => import('@repomedic/core'));
+        '@repomedic/core'
+      );
 
       const model = createModelAdapter({
         backend,
