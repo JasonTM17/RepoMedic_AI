@@ -7,6 +7,7 @@
 RepoMedic is a local-first AI bug triage and guarded patch assistant. It will safely explore a local Git repository, produce evidence and a repair plan, require explicit approval before changes, run bounded checks, and report the result.
 
 ## Documentation
+
 - [Architecture](docs/architecture.md): Overview of the system architecture and modules.
 - [Security Model](docs/security.md): Details on how RepoMedic ensures safe execution and file access.
 

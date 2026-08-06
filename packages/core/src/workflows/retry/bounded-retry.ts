@@ -1,9 +1,9 @@
-import type { ModelAdapter } from '../../model/model-adapter.js';
-import type { PatchProposal, DiagnosisIssue } from '../../domain/entities.js';
-import { runPatchAuthorAgent } from '../../agents/patcher/patch-author-agent.js';
-import { runReviewerAgent } from '../../agents/reviewer/reviewer-agent.js';
-import { revertPatchTool } from '../../tools/patch/revert-patch-tool.js';
-import type { CheckCommand } from '../../checks/check-runner.js';
+import type { ModelAdapter } from "../../model/model-adapter.js";
+import type { PatchProposal, DiagnosisIssue } from "../../domain/entities.js";
+import { runPatchAuthorAgent } from "../../agents/patcher/patch-author-agent.js";
+import { runReviewerAgent } from "../../agents/reviewer/reviewer-agent.js";
+import { revertPatchTool } from "../../tools/patch/revert-patch-tool.js";
+import type { CheckCommand } from "../../checks/check-runner.js";
 
 export interface BoundedRetryOptions {
   model: ModelAdapter;
@@ -18,7 +18,7 @@ export interface BoundedRetryOptions {
 export interface BoundedRetryResult {
   success: boolean;
   attempts: number;
-  finalStatus: 'applied' | 'failed' | 'reverted';
+  finalStatus: "applied" | "failed" | "reverted";
   summary: string;
 }
 
@@ -27,11 +27,26 @@ export interface BoundedRetryResult {
  * up to maxRetries attempts. On each failure, reverts the patch and
  * retries with the failure context. On max retries, marks as failed.
  */
-export async function runBoundedRetry(options: BoundedRetryOptions): Promise<BoundedRetryResult> {
-  const { model, proposal, issues, approved, root, maxRetries = 3, checksToRun } = options;
+export async function runBoundedRetry(
+  options: BoundedRetryOptions,
+): Promise<BoundedRetryResult> {
+  const {
+    model,
+    proposal,
+    issues,
+    approved,
+    root,
+    maxRetries = 3,
+    checksToRun,
+  } = options;
 
   if (!approved) {
-    return { success: false, attempts: 0, finalStatus: 'failed', summary: 'Not approved' };
+    return {
+      success: false,
+      attempts: 0,
+      finalStatus: "failed",
+      summary: "Not approved",
+    };
   }
 
   let attempt = 0;
@@ -46,7 +61,9 @@ export async function runBoundedRetry(options: BoundedRetryOptions): Promise<Bou
       proposal,
       issues,
       approved,
-      ...(previousFailures !== undefined ? { previousFailures: previousFailures as string } : {}),
+      ...(previousFailures !== undefined
+        ? { previousFailures: previousFailures as string }
+        : {}),
       maxIterations: 3,
     });
 
@@ -54,7 +71,7 @@ export async function runBoundedRetry(options: BoundedRetryOptions): Promise<Bou
       return {
         success: false,
         attempts: attempt,
-        finalStatus: 'failed',
+        finalStatus: "failed",
         summary: `Patch author failed on attempt ${attempt}: ${authorResult.error}`,
       };
     }
@@ -64,20 +81,22 @@ export async function runBoundedRetry(options: BoundedRetryOptions): Promise<Bou
       model,
       proposal,
       root,
-      ...(checksToRun !== undefined ? { checksToRun: checksToRun as CheckCommand[] } : {}),
+      ...(checksToRun !== undefined
+        ? { checksToRun: checksToRun as CheckCommand[] }
+        : {}),
     });
 
     if (reviewResult.passed) {
       return {
         success: true,
         attempts: attempt,
-        finalStatus: 'applied',
+        finalStatus: "applied",
         summary: reviewResult.summary,
       };
     }
 
     // Step 3: Revert and record failures for next attempt
-    const pathsToRevert = authorResult.appliedOperations.map(op => op.path);
+    const pathsToRevert = authorResult.appliedOperations.map((op) => op.path);
     if (pathsToRevert.length > 0) {
       await revertPatchTool({ root, paths: pathsToRevert });
     }
@@ -88,7 +107,7 @@ export async function runBoundedRetry(options: BoundedRetryOptions): Promise<Bou
   return {
     success: false,
     attempts: attempt,
-    finalStatus: 'reverted',
-    summary: `Max retries (${maxRetries}) exceeded. Last failure: ${previousFailures ?? 'unknown'}`,
+    finalStatus: "reverted",
+    summary: `Max retries (${maxRetries}) exceeded. Last failure: ${previousFailures ?? "unknown"}`,
   };
 }

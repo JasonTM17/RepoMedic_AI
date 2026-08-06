@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import type { TraceEvent, TraceEventKind } from './trace-event.js';
+import { randomUUID } from "node:crypto";
+import type { TraceEvent, TraceEventKind } from "./trace-event.js";
 
 export class Tracer {
   private readonly sessionId: string;
@@ -10,7 +10,10 @@ export class Tracer {
     this.sessionId = sessionId ?? randomUUID();
   }
 
-  emit(kind: TraceEventKind, metadata: Record<string, unknown> = {}): TraceEvent {
+  emit(
+    kind: TraceEventKind,
+    metadata: Record<string, unknown> = {},
+  ): TraceEvent {
     const event: TraceEvent = {
       index: this.nextIndex++,
       kind,
@@ -37,7 +40,10 @@ export class Tracer {
 
 /** Null tracer that discards all events — used when tracing is disabled. */
 export class NullTracer extends Tracer {
-  override emit(kind: TraceEventKind, metadata: Record<string, unknown> = {}): TraceEvent {
+  override emit(
+    kind: TraceEventKind,
+    metadata: Record<string, unknown> = {},
+  ): TraceEvent {
     // Discard — return a valid event shape without storing it
     return {
       index: -1,
