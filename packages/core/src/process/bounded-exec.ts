@@ -50,7 +50,9 @@ export async function boundedExec(
 
   const timeoutMs = options.timeoutMs ?? 30_000;
   const maxOutputBytes = options.maxOutputBytes ?? 1_048_576; // 1MB
-  const env = options.env ?? {};
+  // Inherit the parent environment by default so the child can locate
+  // executables (PATH) on any platform. An explicit env replaces it.
+  const env = options.env ?? process.env;
 
   return new Promise((resolve, _reject) => {
     let timedOut = false;
