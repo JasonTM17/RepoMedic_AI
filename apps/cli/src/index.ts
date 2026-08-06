@@ -14,9 +14,7 @@ interface TriageOptions {
 function parsePositiveInteger(value: string, flagName: string): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(
-      `${flagName} must be a positive integer, got: "${value}"`,
-    );
+    throw new Error(`${flagName} must be a positive integer, got: "${value}"`);
   }
   return parsed;
 }

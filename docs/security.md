@@ -17,6 +17,7 @@ Defines rules for modifying files. Enforces allowed operation kinds, allowlist g
 A stateful, secure wrapper around `fs/promises`. Performs realpath resolution via `fs.realpath` and re-validates against the `PathAllowlistPolicy` to guarantee the actual path remains confined inside the repository root. Prevents TOCTOU attacks and symlink escape attempts.
 
 Key behaviors:
+
 - Resolves all paths using `fs.realpath` before validation
 - Rejects any resolved path that escapes the repository root
 - Blocks access to `.git/`, `.env`, and other protected paths
@@ -27,6 +28,7 @@ Key behaviors:
 A confined execution environment for running Git commands, linters, formatters, and test suites.
 
 Key behaviors:
+
 - Enforces strict working directory confinement (repository root or valid subdirectory)
 - Uses `child_process.spawn` with explicit argument arrays (no shell injection)
 - Implements process timeouts with SIGTERM/SIGKILL for runaway tasks
@@ -36,10 +38,10 @@ Key behaviors:
 
 ## Security Boundaries
 
-| Component | Protection |
-|-----------|------------|
-| File Access | TOCTOU-safe realpath + allowlist |
-| Path Traversal | Reject `../`, absolute paths, symlink escapes |
+| Component         | Protection                                     |
+| ----------------- | ---------------------------------------------- |
+| File Access       | TOCTOU-safe realpath + allowlist               |
+| Path Traversal    | Reject `../`, absolute paths, symlink escapes  |
 | Command Execution | No shell, cwd confinement, timeout enforcement |
-| Environment | Explicit allowlist only, no full inheritance |
-| Output Size | Configurable max bytes with truncation |
+| Environment       | Explicit allowlist only, no full inheritance   |
+| Output Size       | Configurable max bytes with truncation         |

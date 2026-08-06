@@ -28,12 +28,12 @@ const REPO_ROOT = process.cwd();
 
 function captureStream(stream: NodeJS.WriteStream) {
   const chunks: string[] = [];
-  const spy = vi.spyOn(stream, "write").mockImplementation(
-    ((chunk: unknown) => {
-      chunks.push(String(chunk));
-      return true;
-    }) as typeof stream.write,
-  );
+  const spy = vi.spyOn(stream, "write").mockImplementation(((
+    chunk: unknown,
+  ) => {
+    chunks.push(String(chunk));
+    return true;
+  }) as typeof stream.write);
   return { text: () => chunks.join(""), restore: () => spy.mockRestore() };
 }
 
@@ -107,9 +107,7 @@ describe("CLI triage patch pipeline wiring", () => {
     expect(stdout.text()).toContain(
       "Patch applied successfully after 2 attempt(s)",
     );
-    expect(process.exitCode === undefined || process.exitCode === 0).toBe(
-      true,
-    );
+    expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
   });
 
   it("surfaces failure and exits non-zero when the pipeline fails", async () => {
@@ -152,9 +150,7 @@ describe("CLI triage patch pipeline wiring", () => {
 
     expect(mocks.requestApproval).not.toHaveBeenCalled();
     expect(mocks.runBoundedRetry).not.toHaveBeenCalled();
-    expect(process.exitCode === undefined || process.exitCode === 0).toBe(
-      true,
-    );
+    expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
   });
 
   it("forwards --max-retries to the bounded retry pipeline", async () => {
@@ -200,9 +196,7 @@ describe("CLI triage patch pipeline wiring", () => {
     expect(mocks.runCoordinator).not.toHaveBeenCalled();
     expect(mocks.runBoundedRetry).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
-    expect(stderr.text()).toContain(
-      "--max-retries must be a positive integer",
-    );
+    expect(stderr.text()).toContain("--max-retries must be a positive integer");
   });
 
   it("does not run the pipeline and exits 0 when approval is rejected", async () => {
@@ -217,8 +211,6 @@ describe("CLI triage patch pipeline wiring", () => {
     ]);
 
     expect(mocks.runBoundedRetry).not.toHaveBeenCalled();
-    expect(process.exitCode === undefined || process.exitCode === 0).toBe(
-      true,
-    );
+    expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
   });
 });
