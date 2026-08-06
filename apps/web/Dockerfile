@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /workspace
 
 COPY package.json package-lock.json tsconfig.base.json ./
@@ -14,7 +14,7 @@ COPY packages/api-client packages/api-client
 COPY apps/web apps/web
 RUN npm run build:api-client && npm run build --workspace=@jasonTM17/web
 
-FROM node:24-alpine AS runtime
+FROM node:25-alpine AS runtime
 ARG VCS_REF=local
 LABEL org.opencontainers.image.source="https://github.com/JasonTM17/RepoMedic_AI" \
   org.opencontainers.image.licenses="MIT" \
