@@ -1,4 +1,4 @@
-import type { ModelAdapter, Message } from '../../model/model-adapter.js';
+import type { ModelAdapter } from '../../model/model-adapter.js';
 import type { PatchProposal, CheckResult } from '../../domain/entities.js';
 import { runChecks, DEFAULT_CHECKS, type CheckCommand } from '../../checks/check-runner.js';
 

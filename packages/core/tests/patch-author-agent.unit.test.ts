@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi } from 'vitest';
 import { runPatchAuthorAgent } from '../src/agents/patcher/patch-author-agent.js';
 import { FakeModelAdapter } from '../src/model/fake-model.js';

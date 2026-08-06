@@ -1,7 +1,7 @@
 import type { ModelAdapter } from '../../model/model-adapter.js';
 import type { PatchProposal, DiagnosisIssue } from '../../domain/entities.js';
 import { runPatchAuthorAgent } from '../../agents/patcher/patch-author-agent.js';
-import { runReviewerAgent, type ReviewerAgentOptions } from '../../agents/reviewer/reviewer-agent.js';
+import { runReviewerAgent } from '../../agents/reviewer/reviewer-agent.js';
 import { revertPatchTool } from '../../tools/patch/revert-patch-tool.js';
 import type { CheckCommand } from '../../checks/check-runner.js';
 

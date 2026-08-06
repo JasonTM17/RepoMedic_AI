@@ -9,12 +9,12 @@
 
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 
 // Import core directly from source
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_ROOT = resolve(__dirname, '../fixtures/task-api');
-const REPO_ROOT = resolve(__dirname, '..');
+
 
 async function main() {
   process.stdout.write('=== RepoMedic Evaluation Suite ===\n\n');

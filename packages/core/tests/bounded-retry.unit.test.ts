@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi } from 'vitest';
 import { runBoundedRetry } from '../src/workflows/retry/bounded-retry.js';
 import { FakeModelAdapter } from '../src/model/fake-model.js';
