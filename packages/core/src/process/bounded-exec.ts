@@ -40,7 +40,7 @@ export async function boundedExec(
   args: string[],
   options: BoundedExecOptions,
 ): Promise<BoundedExecResult> {
-  if (!ALLOWED_COMMANDS.includes(command as any)) {
+  if (!(ALLOWED_COMMANDS as readonly string[]).includes(command)) {
     throw new CommandNotAllowedError(command);
   }
 
@@ -52,7 +52,7 @@ export async function boundedExec(
   const maxOutputBytes = options.maxOutputBytes ?? 1_048_576; // 1MB
   const env = options.env ?? {};
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     let timedOut = false;
     let truncated = false;
     let totalBytes = 0;
@@ -105,7 +105,7 @@ export async function boundedExec(
       child.stderr.on("data", (c) => processChunk(c, false));
     }
 
-    child.on("error", (err) => {
+    child.on("error", (_err: Error) => {
       clearTimeout(timeoutId);
       resolve({
         exitCode: -1,
