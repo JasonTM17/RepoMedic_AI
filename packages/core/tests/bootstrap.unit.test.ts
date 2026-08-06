@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { corePackageName, corePackageVersion } from "../src/index.js";
+import { capabilityVersions, packageVersion } from "../src/index.js";
 
 describe("core package bootstrap", () => {
   it("exports stable package metadata without side effects", () => {
-    expect(corePackageName).toBe("@repomedic/core");
-    expect(corePackageVersion).toBe("0.1.0");
+    expect(packageVersion).toBe("0.1.0");
+    expect(capabilityVersions.policyVersion).toBe(1);
+    expect(capabilityVersions.schemaVersion).toBe(1);
   });
 });
