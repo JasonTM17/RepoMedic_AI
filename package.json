@@ -15,7 +15,7 @@
     "fixtures/*"
   ],
   "scripts": {
-    "build": "npm run build:core && npm run build:api-client && npm run build:api && npm run build:cli && npm run build:web",
+    "build": "npm run build:core && npm run build:fs-guard && npm run build:api-client && npm run build:api && npm run build:cli && npm run build:web",
     "build:api": "npm run build --workspace=@repomedic/api",
     "build:api-client": "npm run build --workspace=@repomedic/api-client",
     "build:cli": "npm run build --workspace=@repomedic/cli",
@@ -33,8 +33,9 @@
     "test:security": "vitest run tests/security packages/**/tests/security",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:watch": "vitest",
-    "typecheck": "npm run typecheck --workspace=@repomedic/core && npm run typecheck --workspace=@repomedic/api-client && npm run typecheck --workspace=@repomedic/api && npm run typecheck --workspace=@repomedic/cli && npm run typecheck --workspace=@repomedic/web",
+    "typecheck": "npm run typecheck --workspace=@repomedic/core && npm run typecheck --workspace=@repomedic/fs-guard && npm run typecheck --workspace=@repomedic/api-client && npm run typecheck --workspace=@repomedic/api && npm run typecheck --workspace=@repomedic/cli && npm run typecheck --workspace=@repomedic/web",
     "eval": "tsx evals/run-evals.ts",
+    "build:fs-guard": "npm run build --workspace=@repomedic/fs-guard",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up"
   },
