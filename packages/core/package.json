@@ -20,5 +20,6 @@
     "zod": "^3.24.1",
     "@repomedic/fs-guard": "*",
     "@repomedic/exec-guard": "*"
-  }
+  },
+  "repository": "https://github.com/JasonTM17/RepoMedic_AI"
 }

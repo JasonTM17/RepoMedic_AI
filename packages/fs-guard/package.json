@@ -17,5 +17,6 @@
   },
   "dependencies": {
     "@repomedic/core": "*"
-  }
+  },
+  "repository": "https://github.com/JasonTM17/RepoMedic_AI"
 }

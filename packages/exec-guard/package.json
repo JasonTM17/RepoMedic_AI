@@ -14,5 +14,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit"
-  }
+  },
+  "repository": "https://github.com/JasonTM17/RepoMedic_AI"
 }
