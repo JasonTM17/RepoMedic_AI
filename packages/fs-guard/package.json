@@ -18,9 +18,6 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@jasonTM17/core": "^0.1.0"
-  },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/",
     "access": "public"
