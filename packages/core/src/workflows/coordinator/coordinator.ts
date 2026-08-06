@@ -30,7 +30,7 @@ export async function runCoordinator(options: CoordinatorOptions): Promise<Coord
     target,
     issueDescription,
     allowlist,
-    maxIterations: maxExplorerIterations,
+    ...(maxExplorerIterations !== undefined ? { maxIterations: maxExplorerIterations } : {}),
   });
   
   const { issues, iterations, stopped } = explorerResult;
@@ -47,7 +47,7 @@ export async function runCoordinator(options: CoordinatorOptions): Promise<Coord
       .filter(i => i.file)
       .map((issue, idx) => ({
         id: `op-${idx}`,
-        path: issue.file!, // eslint-disable-line @typescript-eslint/no-non-null-assertion
+        path: issue.file!,  
         kind: 'modify' as const,
         hunks: [],
       })),
