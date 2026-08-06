@@ -1,5 +1,9 @@
 # RepoMedic
 
+<p align="center">
+  <img src="docs/images/cover.jpg" alt="RepoMedic AI Cover Image" width="100%">
+</p>
+
 RepoMedic is a local-first AI bug triage and guarded patch assistant. It will safely explore a local Git repository, produce evidence and a repair plan, require explicit approval before changes, run bounded checks, and report the result.
 
 ## Documentation
