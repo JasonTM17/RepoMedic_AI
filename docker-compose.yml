@@ -1,40 +1,29 @@
+version: '3.8'
+
 services:
   api:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
-    environment:
-      HOST: 0.0.0.0
-      PORT: "4000"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:4000/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      dockerfile: Dockerfile
     ports:
-      - "127.0.0.1:${REPOMEDIC_API_PORT:-4000}:4000"
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+      - /app/node_modules
+    restart: unless-stopped
 
   web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-    environment:
-      NEXT_PUBLIC_REPOMEDIC_API_URL: http://api:4000
-    depends_on:
-      api:
-        condition: service_healthy
+    image: node:22-alpine
+    working_dir: /app/apps/web
     ports:
-      - "127.0.0.1:${REPOMEDIC_WEB_PORT:-3000}:3000"
-
-  cli:
-    build:
-      context: .
-      dockerfile: apps/cli/Dockerfile
-    profiles: ["tools"]
-    entrypoint: ["node", "dist/index.js"]
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ../../:/app
+    command: npm run dev
+    depends_on:
+      - api
