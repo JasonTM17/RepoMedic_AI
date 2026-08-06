@@ -5,4 +5,3 @@
 export const corePackageName = "@repomedic/core";
 
 export const corePackageVersion = "0.1.0";
-export * from "./exec/SecureCommandRunner.js";

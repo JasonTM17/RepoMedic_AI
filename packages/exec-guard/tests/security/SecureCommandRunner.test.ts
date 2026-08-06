@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { SecureCommandRunner } from "../../src/exec/SecureCommandRunner.js";
+import { SecureCommandRunner } from "../../src/SecureCommandRunner.js";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
