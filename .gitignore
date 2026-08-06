@@ -1,0 +1,40 @@
+# User-managed and private automation context
+.claude/
+.claude-private/
+.private/
+plans/
+
+# Secrets and machine-local configuration
+.env
+.env.*
+!.env.example
+!.env.production.example
+*.local
+*.local.*
+!docker-compose.local.yml
+*.private.md
+*.pem
+*.key
+id_rsa
+id_ed25519
+credentials.json
+service-account.json
+
+# Dependencies and generated output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.next/
+**/.next/
+coverage/
+**/coverage/
+reports/
+.repomedic/
+*.tsbuildinfo
+
+# Tooling and operating-system noise
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*

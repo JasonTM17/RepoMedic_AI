@@ -1,0 +1,9 @@
+.claude/
+plans/
+node_modules/
+dist/
+.next/
+coverage/
+reports/
+.repomedic/
+package-lock.json

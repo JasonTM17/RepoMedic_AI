@@ -1,0 +1,7 @@
+services:
+  api:
+    ports:
+      - "${REPOMEDIC_LOCAL_API_PORT:-4400}:4000"
+  web:
+    ports:
+      - "${REPOMEDIC_LOCAL_WEB_PORT:-4300}:3000"

@@ -1,0 +1,53 @@
+{
+  "name": "repomedic",
+  "version": "0.1.0",
+  "description": "Local-first AI bug triage and guarded patch assistant",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.6.2",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "fixtures/*"
+  ],
+  "scripts": {
+    "build": "npm run build:core && npm run build:api-client && npm run build:api && npm run build:cli && npm run build:web",
+    "build:api": "npm run build --workspace=@repomedic/api",
+    "build:api-client": "npm run build --workspace=@repomedic/api-client",
+    "build:cli": "npm run build --workspace=@repomedic/cli",
+    "build:core": "npm run build --workspace=@repomedic/core",
+    "build:web": "npm run build --workspace=@repomedic/web",
+    "dev:api": "npm run dev --workspace=@repomedic/api",
+    "dev:web": "npm run dev --workspace=@repomedic/web",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "repomedic": "npm run repomedic --workspace=@repomedic/cli --",
+    "test": "vitest run",
+    "test:integration": "vitest run tests/integration apps/**/tests/integration packages/**/tests/integration",
+    "test:security": "vitest run tests/security packages/**/tests/security",
+    "test:unit": "vitest run tests/unit apps/**/tests/unit packages/**/tests/unit",
+    "test:watch": "vitest",
+    "typecheck": "npm run typecheck --workspace=@repomedic/core && npm run typecheck --workspace=@repomedic/api-client && npm run typecheck --workspace=@repomedic/api && npm run typecheck --workspace=@repomedic/cli && npm run typecheck --workspace=@repomedic/web",
+    "eval": "tsx evals/run-evals.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.29.0",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.34",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@types/supertest": "^6.0.3",
+    "eslint": "^9.29.0",
+    "prettier": "^3.5.3",
+    "supertest": "^7.1.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.35.0",
+    "vitest": "^3.2.4"
+  }
+}

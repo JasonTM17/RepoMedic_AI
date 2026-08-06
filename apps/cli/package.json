@@ -1,0 +1,17 @@
+{
+  "name": "@repomedic/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "repomedic": "./dist/index.js"
+  },
+  "dependencies": {
+    "commander": "^13.1.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "repomedic": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}
