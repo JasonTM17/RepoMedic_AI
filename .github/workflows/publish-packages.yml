@@ -1,5 +1,17 @@
 name: Publish Packages
 
+# Release procedure:
+#   1. Bump the `version` field in the package(s) being released under
+#      `packages/*/package.json`. Commit that change on `main`.
+#   2. Create and push a tag matching `v*` (e.g. `git tag v0.2.0 && git push
+#      origin v0.2.0`) — this triggers the workflow below.
+#   3. Alternatively, run this workflow manually via `workflow_dispatch` (for
+#      example to retry a partially failed release). Each publish step checks
+#      whether that package's current version already exists on GitHub
+#      Packages and skips it if so, so re-running is safe.
+#   4. Packages are independent — none of the four declares a dependency on
+#      another @jasonTM17 package — so there is no required publish order and
+#      a partial failure does not block the others from publishing.
 on:
   push:
     tags:
@@ -33,23 +45,51 @@ jobs:
       - name: Run tests
         run: npm test
 
-      # Publish in dependency order: core → fs-guard/exec-guard → api-client
+      # Each package is published independently: none of the four declares a
+      # dependency on another @jasonTM17 package, so there is no required
+      # publish order. A version check keeps re-running this workflow (e.g. a
+      # re-tagged release, or workflow_dispatch after a partial failure) from
+      # hard-failing on packages whose version was already published.
       - name: Publish @jasonTM17/core
-        run: npm publish --workspace=@jasonTM17/core
+        run: |
+          VERSION=$(node -p "require('./packages/core/package.json').version")
+          if npm view "@jasonTM17/core@$VERSION" version >/dev/null 2>&1; then
+            echo "@jasonTM17/core@$VERSION already published; skipping"
+          else
+            npm publish --workspace=@jasonTM17/core
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @jasonTM17/fs-guard
-        run: npm publish --workspace=@jasonTM17/fs-guard
+        run: |
+          VERSION=$(node -p "require('./packages/fs-guard/package.json').version")
+          if npm view "@jasonTM17/fs-guard@$VERSION" version >/dev/null 2>&1; then
+            echo "@jasonTM17/fs-guard@$VERSION already published; skipping"
+          else
+            npm publish --workspace=@jasonTM17/fs-guard
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @jasonTM17/exec-guard
-        run: npm publish --workspace=@jasonTM17/exec-guard
+        run: |
+          VERSION=$(node -p "require('./packages/exec-guard/package.json').version")
+          if npm view "@jasonTM17/exec-guard@$VERSION" version >/dev/null 2>&1; then
+            echo "@jasonTM17/exec-guard@$VERSION already published; skipping"
+          else
+            npm publish --workspace=@jasonTM17/exec-guard
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @jasonTM17/api-client
-        run: npm publish --workspace=@jasonTM17/api-client
+        run: |
+          VERSION=$(node -p "require('./packages/api-client/package.json').version")
+          if npm view "@jasonTM17/api-client@$VERSION" version >/dev/null 2>&1; then
+            echo "@jasonTM17/api-client@$VERSION already published; skipping"
+          else
+            npm publish --workspace=@jasonTM17/api-client
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
