@@ -24,3 +24,34 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run generate:api-client
+      - uses: gitleaks/gitleaks-action@v2
+      - uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  docker-build:
+    name: ci/docker-build
+    needs: build-test-lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, web, cli]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.service }}/Dockerfile
+          load: true
+          push: false
+          tags: repomedic/${{ matrix.service }}:ci
+      - uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: repomedic/${{ matrix.service }}:ci
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: "1"

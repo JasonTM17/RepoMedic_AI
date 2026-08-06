@@ -17,4 +17,17 @@ describe("RepoMedic API bootstrap", () => {
     expect(response.status).toBe(200);
     expect(response.text).toContain("repomedic_api_info");
   });
+
+  it("returns a bounded JSON response for malformed JSON", async () => {
+    const response = await request(createApp())
+      .post("/v1/repairs")
+      .set("content-type", "application/json")
+      .send("{");
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      code: "INVALID_JSON",
+      message: "Invalid JSON body",
+    });
+  });
 });

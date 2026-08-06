@@ -7,3 +7,4 @@ coverage/
 reports/
 .repomedic/
 package-lock.json
+packages/api-client/src/generated/

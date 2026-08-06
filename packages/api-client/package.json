@@ -13,6 +13,11 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "generate": "openapi-ts -f openapi-ts.config.ts",
+    "generate:check": "npm run generate && git diff --exit-code -- src/generated",
     "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.97.0"
   }
 }

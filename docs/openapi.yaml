@@ -34,3 +34,14 @@ paths:
                   status:
                     type: string
                     const: ready
+  /metrics:
+    get:
+      operationId: getMetrics
+      responses:
+        "200":
+          description: Prometheus metrics.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 'repomedic_api_info{service="api"} 1\n'

@@ -29,7 +29,7 @@ Use an Express API in `apps/api` and a Next.js App Router dashboard in `apps/web
 
 ### Neutral
 
-- No remote deployment or publishing is enabled by this decision.
+- Docker Hub publishing workflows are prepared for a future `main` branch release but are not invoked by this local bootstrap or without separately configured repository secrets.
 
 ## Alternatives considered
 

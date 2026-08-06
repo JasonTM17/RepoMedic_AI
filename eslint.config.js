@@ -16,6 +16,12 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    files: ["packages/api-client/src/generated/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
     rules: {
       "@typescript-eslint/consistent-type-imports": [
         "error",

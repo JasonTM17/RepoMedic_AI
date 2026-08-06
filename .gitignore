@@ -3,6 +3,18 @@
 .claude-private/
 .private/
 plans/
+PLAN*.md
+plan*.md
+NOTES*.md
+notes*.md
+TODO*.md
+todo*.md
+ROADMAP*.md
+roadmap*.md
+DRAFT*.md
+draft*.md
+DOCUMENTATION_MASTER.md
+RULES.md
 
 # Secrets and machine-local configuration
 .env

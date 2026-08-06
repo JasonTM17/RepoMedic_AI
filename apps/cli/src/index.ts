@@ -1,3 +1,6 @@
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { Command } from "commander";
 
 export function createProgram(): Command {
@@ -20,9 +23,10 @@ export async function runCli(argv: string[]): Promise<void> {
   await createProgram().parseAsync(argv);
 }
 
+const entrypoint = process.argv[1];
 const isDirectExecution =
-  process.argv[1]?.endsWith("index.ts") ||
-  process.argv[1]?.endsWith("index.js");
+  entrypoint !== undefined &&
+  resolve(entrypoint) === fileURLToPath(import.meta.url);
 
 if (isDirectExecution) {
   void runCli(process.argv);

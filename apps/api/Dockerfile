@@ -10,8 +10,10 @@ COPY packages/core/package.json packages/core/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
 RUN npm ci
 
+COPY packages/core packages/core
+COPY packages/api-client packages/api-client
 COPY apps/api apps/api
-RUN npm run build --workspace=@repomedic/api
+RUN npm run build:core && npm run build:api-client && npm run build --workspace=@repomedic/api
 
 FROM node:22-alpine AS runtime
 ARG VCS_REF=local
@@ -21,6 +23,8 @@ LABEL org.opencontainers.image.source="https://github.com/JasonTM17/RepoMedic_AI
 WORKDIR /app
 RUN addgroup -S repomedic && adduser -S -G repomedic -u 65532 repomedic
 COPY --from=build /workspace/node_modules ./node_modules
+COPY --from=build /workspace/packages/core ./packages/core
+COPY --from=build /workspace/packages/api-client ./packages/api-client
 COPY --from=build /workspace/apps/api/package.json ./package.json
 COPY --from=build /workspace/apps/api/dist ./dist
 USER 65532:65532
