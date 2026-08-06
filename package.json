@@ -34,7 +34,9 @@
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:watch": "vitest",
     "typecheck": "npm run typecheck --workspace=@repomedic/core && npm run typecheck --workspace=@repomedic/api-client && npm run typecheck --workspace=@repomedic/api && npm run typecheck --workspace=@repomedic/cli && npm run typecheck --workspace=@repomedic/web",
-    "eval": "tsx evals/run-evals.ts"
+    "eval": "tsx evals/run-evals.ts",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up"
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",
