@@ -1,3 +1,4 @@
+import type { PathAllowlistPolicy } from "@repomedic/core";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { SecureFileAccessor } from "../src/SecureFileAccessor.js";
 import { promises as fs } from "node:fs";
@@ -7,19 +8,19 @@ import * as os from "node:os";
 // Mock PathAllowlistPolicy
 class MockPolicy {
   constructor(private allowedPaths?: string[]) {}
-  validate(relativePath: string) {
+  validatePath(relativePath: string) {
     if (
       this.allowedPaths &&
       !this.allowedPaths.includes(relativePath) &&
       !this.allowedPaths.includes("*")
     ) {
-      return { allowed: false, reason: "Not in allowlist" };
+      return { valid: false, reason: "Not in allowlist" };
     }
     // Block secrets just as an example
     if (relativePath.includes(".env") || relativePath.includes(".git")) {
-      return { allowed: false, reason: "Denied path" };
+      return { valid: false, reason: "Denied path" };
     }
-    return { allowed: true };
+    return { valid: true };
   }
 }
 
@@ -118,4 +119,6 @@ describe("SecureFileAccessor", () => {
     // The test is just checking resolve doesn"t break.
   });
 });
+
+
 

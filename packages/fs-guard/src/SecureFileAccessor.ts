@@ -86,8 +86,8 @@ export class SecureFileAccessor {
       .replace(/\\/g, "/");
 
     // Check against policy
-    const decision = this.policy.validate(resolvedRelative);
-    if (!decision.allowed) {
+    const decision = this.policy.validatePath(resolvedRelative);
+    if (!decision.valid) {
       throw new Error(
         `Path denied by policy: ${resolvedRelative} - ${decision.reason || "No reason provided"}`,
       );
@@ -123,6 +123,7 @@ export class SecureFileAccessor {
     return fs.stat(safePath);
   }
 }
+
 
 
 
