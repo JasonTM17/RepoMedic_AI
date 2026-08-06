@@ -1,56 +1,35 @@
-import { readdir, readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
 
-/**
- * Purity gate for the phase-2 core surface: packages/core/src/domain,
- * /schemas, /policy, and version.ts are the deterministic, side-effect-free
- * heart of RepoMedic. No file in this phase-2 surface may import I/O-capable
- * node modules.
- *
- * `src/fs/` is phase 3 (secure filesystem) by design and imports `node:fs`;
- * `src/process/` is phase 4 (process execution) and imports `node:child_process`;
- * `src/model/` is phase 8 (model abstraction) and imports `node:fetch`;
- * these are excluded here and get their own confinement review in their phases.
- */
-const FORBIDDEN_IMPORTS = [
-  "node:fs",
-  "node:child_process",
-  "node:net",
-  "node:http",
-  "node:https",
-];
+describe("Purity Gate", () => {
+  it("core should not import node builtins", () => {
+    // This is a naive AST-free check using regex on source files.
+    // In a real codebase, a linter handles this, but a test was requested.
+    const srcDir = path.join(__dirname, "../src");
 
-/** Anchored to this file, so the gate works from any cwd. */
-const CORE_SRC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
-
-/** Phase-3+ directories that intentionally own I/O. */
-const PHASE_3_EXCLUDED = new Set(["fs", "process", "model", "tools", "checks", "agents", "workflows", "approval", "tracing"]);
-
-async function listPhase2SourceFiles(dir: string): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    if (entry.isDirectory() && PHASE_3_EXCLUDED.has(entry.name)) continue;
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) files.push(...(await listPhase2SourceFiles(full)));
-    else if (entry.name.endsWith(".ts")) files.push(full);
-  }
-  return files;
-}
-
-describe("core purity gate (phase 2 surface)", () => {
-  it("does not import I/O-capable node modules", async () => {
-    const files = await listPhase2SourceFiles(CORE_SRC_DIR);
-    expect(files.length).toBeGreaterThan(0);
-    for (const file of files) {
-      const content = await readFile(file, "utf8");
-      for (const forbidden of FORBIDDEN_IMPORTS) {
-        expect(content, `${file} must not import ${forbidden}`).not.toContain(
-          forbidden,
-        );
+    function walk(dir: string, files: string[] = []) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(fullPath, files);
+        else if (entry.isFile() && fullPath.endsWith(".ts"))
+          files.push(fullPath);
       }
+      return files;
+    }
+
+    const tsFiles = walk(srcDir);
+    const forbidden =
+      /from\s+['"](fs|path|child_process|net|http|node:[^'"]+)['"]/g;
+
+    for (const file of tsFiles) {
+      const content = fs.readFileSync(file, "utf-8");
+      const matches = [...content.matchAll(forbidden)];
+      expect(
+        matches,
+        `File ${file} contains forbidden node imports`,
+      ).toHaveLength(0);
     }
   });
 });

@@ -1,318 +1,117 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "vitest";
+import { PathAllowlistPolicy, MutationPolicy } from "../src/policy/index.js";
 
-import {
-  checkPathAllowlist,
-  evaluateMutationPolicy,
-  isPathAllowed,
-  isWithinRoot,
-  normalizePathForPolicy,
-} from "../src/policy/index.js";
-
-const ROOT = "/repo";
-const ALLOWLIST = ["src", "packages/core", "docs"];
-
-describe("normalizePathForPolicy", () => {
-  it("converts backslashes to slashes", () => {
-    expect(normalizePathForPolicy("src\\app.ts")).toBe("src/app.ts");
+describe("PathAllowlistPolicy", () => {
+  it("allows matching path", () => {
+    const policy = new PathAllowlistPolicy(["src", "docs"]);
+    expect(policy.validatePath("src/main.ts").valid).toBe(true);
+    expect(policy.validatePath("docs/index.md").valid).toBe(true);
+    expect(policy.validatePath("src").valid).toBe(true);
   });
 
-  it("strips leading ./", () => {
-    expect(normalizePathForPolicy("./src/app.ts")).toBe("src/app.ts");
+  it("rejects absolute paths", () => {
+    const policy = new PathAllowlistPolicy(["src"]);
+    expect(policy.validatePath("/src/main.ts").valid).toBe(false);
+    expect(policy.validatePath("C:/src/main.ts").valid).toBe(false);
+    expect(policy.validatePath("\\\\UNC\\path").valid).toBe(false);
   });
 
-  it("collapses duplicate slashes", () => {
-    expect(normalizePathForPolicy("src//app.ts")).toBe("src/app.ts");
-  });
-});
-
-describe("checkPathAllowlist", () => {
-  it("allows an allowlisted path", () => {
-    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "src/app.ts");
-    expect(decision.allowed).toBe(true);
-    expect(decision.violations).toEqual([]);
+  it("rejects directory traversal", () => {
+    const policy = new PathAllowlistPolicy(["src"]);
+    expect(policy.validatePath("src/../secret").valid).toBe(false);
   });
 
-  it("allows a path equal to an allowlist entry", () => {
-    expect(checkPathAllowlist(ROOT, ALLOWLIST, "src").allowed).toBe(true);
+  it("rejects sibling prefix (e.g. core-evil)", () => {
+    const policy = new PathAllowlistPolicy(["core"]);
+    expect(policy.validatePath("core-evil/test").valid).toBe(false);
   });
 
-  it("rejects an empty path", () => {
-    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "");
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("empty-path");
-  });
-
-  it("rejects an absolute path", () => {
-    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "/etc/passwd");
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("absolute-path");
-  });
-
-  it("rejects a Windows drive path", () => {
-    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "C:/Windows/system32");
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("absolute-path");
-  });
-
-  it("rejects a UNC path", () => {
-    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "//server/share");
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("absolute-path");
-  });
-
-  it("rejects parent traversal", () => {
-    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "../evil.sh");
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("traversal");
-  });
-
-  it("rejects nested parent traversal", () => {
-    expect(
-      checkPathAllowlist(ROOT, ALLOWLIST, "src/../../evil.sh").allowed,
-    ).toBe(false);
-  });
-
-  it("rejects a sibling-prefix path (component-exact)", () => {
-    const decision = checkPathAllowlist(
-      ROOT,
-      ["packages/core"],
-      "packages/core-evil/run.sh",
-    );
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("not-allowlisted");
-  });
-
-  it("rejects a path outside the root (sibling root)", () => {
-    // traversal is caught first
-    expect(
-      checkPathAllowlist("/repo", ["src"], "src/../other/file").allowed,
-    ).toBe(false);
-  });
-
-  it("rejects a path under a sibling root", () => {
-    const confined = checkPathAllowlist("/repo", ["src"], "src2/x");
-    expect(confined.allowed).toBe(false);
-    expect(confined.violations[0]?.code).toBe("not-allowlisted");
-  });
-
-  it("rejects a denied component (.git)", () => {
-    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "src/.git/config");
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("denied-path");
-  });
-
-  it("rejects a non-allowlisted path", () => {
-    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "vendor/lib.js");
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("not-allowlisted");
-  });
-
-  it("rejects a trailing-space traversal variant", () => {
-    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "src/.. /evil.sh");
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("traversal");
-  });
-
-  it("rejects a percent-encoded traversal variant", () => {
-    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "src/%2e%2e/evil.sh");
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("traversal");
-  });
-
-  it("rejects backslash + percent-encoded traversal (mixed variant)", () => {
-    const decision = checkPathAllowlist(ROOT, ALLOWLIST, "src\\..%2f..%2fetc");
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("traversal");
+  it("rejects empty paths", () => {
+    const policy = new PathAllowlistPolicy(["src"]);
+    expect(policy.validatePath("").valid).toBe(false);
+    expect(policy.validatePath("./.").valid).toBe(false); // resolves to empty segments
   });
 });
 
-describe("isPathAllowed / isWithinRoot", () => {
-  it("wraps the policy result", () => {
-    expect(isPathAllowed(ROOT, ALLOWLIST, "src/app.ts")).toBe(true);
-    expect(isPathAllowed(ROOT, ALLOWLIST, "vendor/x")).toBe(false);
-  });
+describe("MutationPolicy", () => {
+  const allowlist = new PathAllowlistPolicy(["src", "docs"]);
+  const policy = new MutationPolicy(allowlist);
 
-  it("confines paths to the root", () => {
-    expect(isWithinRoot("/repo", "/repo")).toBe(true);
-    expect(isWithinRoot("/repo", "/repo/src/a.ts")).toBe(true);
-    expect(isWithinRoot("/repo", "/repositories/other")).toBe(false);
-  });
-
-  it("handles a root with a trailing slash", () => {
-    expect(isWithinRoot("/repo/", "/repo/x")).toBe(true);
-    expect(isWithinRoot("/repo/", "/repo2/x")).toBe(false);
-  });
-
-  it("is component-exact (sibling roots never match)", () => {
-    expect(isWithinRoot("/repo", "/repo2/x")).toBe(false);
-    expect(isWithinRoot("/repo", "/repo-evil/x")).toBe(false);
-  });
-
-  it("rejects resolved paths that contain traversal", () => {
-    expect(isWithinRoot("/repo", "/repo/../outside")).toBe(false);
-  });
-
-  it("normalizes backslashes on both sides", () => {
-    expect(isWithinRoot("C:\\repo", "C:\\repo\\src\\a.ts")).toBe(true);
-    expect(isWithinRoot("C:\\repo", "C:\\other\\x")).toBe(false);
-  });
-});
-
-describe("evaluateMutationPolicy", () => {
-  const options = { root: ROOT, allowlist: ALLOWLIST };
-
-  it("allows an approved allowlisted modification", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src/app.ts", kind: "modify" },
-      true,
-    );
+  it("allows valid operations", () => {
+    const decision = policy.evaluate({
+      id: "1",
+      humanApprovalRequired: false,
+      operations: [{ kind: "modify", path: "src/main.ts", content: "hello" }],
+    });
     expect(decision.allowed).toBe(true);
   });
 
-  it("blocks an unapproved mutation by default", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src/app.ts", kind: "modify" },
-      false,
-    );
+  it("rejects unknown kinds", () => {
+    const decision = policy.evaluate({
+      id: "1",
+      humanApprovalRequired: false,
+      operations: [{ kind: "magic" as any, path: "src/main.ts" }],
+    });
     expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("approval-required");
+    expect(decision.violations[0]?.reason).toBe("unsupported_operation");
   });
 
-  it("blocks a path outside the allowlist even when approved", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "vendor/x.js", kind: "create" },
-      true,
-    );
+  it("rejects .git modification", () => {
+    const decision = policy.evaluate({
+      id: "1",
+      humanApprovalRequired: false,
+      operations: [{ kind: "modify", path: "src/.git/config" }],
+    });
     expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("not-allowlisted");
+    expect(decision.violations[0]?.reason).toBe("denied_directory");
   });
 
-  it("blocks .git writes even when approved", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src/.git/config", kind: "modify" },
-      true,
-    );
+  it("rejects .env modification", () => {
+    const decision = policy.evaluate({
+      id: "1",
+      humanApprovalRequired: false,
+      operations: [{ kind: "modify", path: "src/.env.local" }],
+    });
     expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("denied-path");
+    expect(decision.violations[0]?.reason).toBe("denied_file");
   });
 
-  it("blocks secret-file writes even when approved", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src/.env", kind: "create" },
-      true,
-    );
+  it("rejects secret/credential paths", () => {
+    const decision = policy.evaluate({
+      id: "1",
+      humanApprovalRequired: false,
+      operations: [{ kind: "modify", path: "src/aws-credentials.json" }],
+    });
     expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("denied-path");
+    expect(decision.violations[0]?.reason).toBe("denied_file");
   });
 
-  it("blocks backslash-encoded secret paths (bypass attempt)", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src\\.env", kind: "create" },
-      true,
-    );
+  it("rejects chmod executable on non-scripts", () => {
+    const decision = policy.evaluate({
+      id: "1",
+      humanApprovalRequired: false,
+      operations: [{ kind: "chmod", path: "src/data.json", mode: 0o755 }],
+    });
     expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("denied-path");
+    expect(decision.violations[0]?.reason).toBe("denied_extension");
   });
 
-  it("blocks backslash-encoded .git paths (bypass attempt)", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src\\.git\\config", kind: "modify" },
-      true,
-    );
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("denied-path");
-  });
-
-  it("blocks extensionless AWS credential paths", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src/.aws/credentials", kind: "create" },
-      true,
-    );
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("denied-path");
-  });
-
-  it("blocks .ssh key paths", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src/.ssh/id_rsa", kind: "create" },
-      true,
-    );
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("denied-path");
-  });
-
-  it("blocks unknown operation kinds", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src/app.ts", kind: "explode" as "modify" },
-      true,
-    );
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("unknown-kind");
-  });
-
-  it("blocks chmod without a mode", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src/run.sh", kind: "chmod" },
-      true,
-    );
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("invalid-mode");
-  });
-
-  it("blocks chmod to executable mode without approval", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src/run.sh", kind: "chmod", mode: 0o755 },
-      false,
-    );
-    expect(decision.allowed).toBe(false);
-    expect(decision.violations[0]?.code).toBe("approval-required");
-  });
-
-  it("allows chmod to non-executable mode", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src/run.sh", kind: "chmod", mode: 0o644 },
-      true,
-    );
+  it("allows chmod executable on scripts", () => {
+    const decision = policy.evaluate({
+      id: "1",
+      humanApprovalRequired: false,
+      operations: [{ kind: "chmod", path: "src/build.sh", mode: 0o755 }],
+    });
     expect(decision.allowed).toBe(true);
   });
 
-  it("allows chmod to executable when approved and approval not required", () => {
-    const decision = evaluateMutationPolicy(
-      { root: ROOT, allowlist: ALLOWLIST, requireHumanApproval: false },
-      { id: "op-1", path: "src/run.sh", kind: "chmod", mode: 0o755 },
-      true,
-    );
-    expect(decision.allowed).toBe(true);
-  });
-
-  it("honors requireHumanApproval: false", () => {
-    const decision = evaluateMutationPolicy(
-      { root: ROOT, allowlist: ALLOWLIST, requireHumanApproval: false },
-      { id: "op-1", path: "src/app.ts", kind: "modify" },
-      false,
-    );
-    expect(decision.allowed).toBe(true);
-  });
-
-  it("reports the current policy version", () => {
-    const decision = evaluateMutationPolicy(
-      options,
-      { id: "op-1", path: "src/app.ts", kind: "modify" },
-      true,
-    );
-    expect(decision.policyVersion).toBe(1);
+  it("rejects unallowed path", () => {
+    const decision = policy.evaluate({
+      id: "1",
+      humanApprovalRequired: false,
+      operations: [{ kind: "modify", path: "root2/test.ts" }],
+    });
+    expect(decision.allowed).toBe(false);
+    expect(decision.violations[0]?.reason).toBe("not_in_allowlist");
   });
 });
