@@ -7,6 +7,7 @@ export default defineConfig({
       "packages/**/tests/**/*.test.ts",
       "tests/**/*.test.ts",
     ],
+    exclude: ["**/node_modules/**", "**/dist/**", "fixtures/**/*.bug.test.ts"],
     environment: "node",
     globals: false,
     passWithNoTests: false,
