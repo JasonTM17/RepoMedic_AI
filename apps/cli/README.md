@@ -7,7 +7,17 @@ The CLI provides a scriptable local interface for the same guarded repair workfl
 ## API surface
 
 - `repomedic doctor` — validates local CLI availability.
-- Repair commands arrive in later phases.
+- `repomedic triage <repo-path>` — runs the explorer, requests human approval
+  for the resulting patch proposal, then applies it through the bounded
+  retry pipeline (`packages/core` patch author + reviewer agents). Exits
+  non-zero if the patch pipeline reports `failed` or `reverted`; exits `0` on
+  `applied`, on no issues found, on approval rejection, and in `--dry-run`.
+  - `--dry-run` — plan only; never invokes the patch pipeline.
+  - `--model <backend>` — `fake` (default) or `openai`.
+  - `--allowlist <paths>` — comma-separated path allowlist relative to the repo root.
+  - `--max-retries <n>` — positive integer; forwarded to the bounded retry
+    pipeline as the attempt cap (default `3`).
+  - `--issue <description>` — issue description passed to the explorer.
 
 ## Env vars
 
