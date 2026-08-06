@@ -1,7 +1,4 @@
-/**
- * Describes the intentionally side-effect-free core package boundary.
- * Workflow behavior is introduced in later phases.
- */
-export const corePackageName = "@repomedic/core";
-
-export const corePackageVersion = "0.1.0";
+export * from "./version.js";
+export * from "./domain/index.js";
+export * from "./schemas/index.js";
+export * from "./policy/index.js";
