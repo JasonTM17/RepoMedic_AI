@@ -1,7 +1,9 @@
 import { promises as fs } from "node:fs";
 import type { Stats } from "node:fs";
 import * as path from "node:path";
-import type { PathAllowlistPolicy } from "@repomedic/core";
+export interface PathAllowlistPolicy {
+  validatePath(path: string): { valid: boolean; reason?: string };
+}
 
 export class SecureFileAccessor {
   private readonly root: string;
