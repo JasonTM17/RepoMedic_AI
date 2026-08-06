@@ -21,8 +21,8 @@
   },
   "dependencies": {
     "zod": "^3.24.1",
-    "@jasonTM17/fs-guard": "*",
-    "@jasonTM17/exec-guard": "*"
+    "@jasonTM17/fs-guard": "^0.1.0",
+    "@jasonTM17/exec-guard": "^0.1.0"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/",
