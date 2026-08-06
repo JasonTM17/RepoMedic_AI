@@ -7,7 +7,7 @@ The web application is the local dashboard for submitting repair runs, reviewing
 ## API surface
 
 - `GET /healthz` — local web health route.
-- The generated `@repomedic/api-client` package will own repair API calls in a later phase.
+- The generated `@jasonTM17/api-client` package will own repair API calls in a later phase.
 
 ## Env vars
 

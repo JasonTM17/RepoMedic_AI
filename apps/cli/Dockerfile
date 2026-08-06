@@ -13,7 +13,7 @@ RUN npm ci
 COPY packages/core packages/core
 COPY packages/api-client packages/api-client
 COPY apps/cli apps/cli
-RUN npm run build:core && npm run build:api-client && npm run build --workspace=@repomedic/cli
+RUN npm run build:core && npm run build:api-client && npm run build --workspace=@jasonTM17/cli
 
 FROM node:22-alpine AS runtime
 ARG VCS_REF=local

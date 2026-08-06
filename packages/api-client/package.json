@@ -1,7 +1,7 @@
 {
-  "name": "@repomedic/api-client",
+  "name": "@jasonTM17/api-client",
   "version": "0.1.0",
-  "private": true,
+  "description": "Generated OpenAPI client for the RepoMedic API",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,6 +11,9 @@
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "generate": "openapi-ts -f openapi-ts.config.ts",
@@ -20,5 +23,10 @@
   "devDependencies": {
     "@hey-api/openapi-ts": "0.97.0"
   },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/",
+    "access": "public"
+  },
+  "license": "MIT",
   "repository": "https://github.com/JasonTM17/RepoMedic_AI"
 }

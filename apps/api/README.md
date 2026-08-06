@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The API exposes the local repair workflow to the dashboard and other trusted local clients. It will call `@repomedic/core`; it does not embed frontend behavior.
+The API exposes the local repair workflow to the dashboard and other trusted local clients. It will call `@jasonTM17/core`; it does not embed frontend behavior.
 
 ## API surface
 

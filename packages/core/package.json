@@ -1,7 +1,7 @@
 {
-  "name": "@repomedic/core",
+  "name": "@jasonTM17/core",
   "version": "0.1.0",
-  "private": true,
+  "description": "Deterministic core domain, schemas, and policy for RepoMedic — a local-first AI bug triage and guarded patch assistant",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,6 +11,9 @@
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
@@ -18,8 +21,13 @@
   },
   "dependencies": {
     "zod": "^3.24.1",
-    "@repomedic/fs-guard": "*",
-    "@repomedic/exec-guard": "*"
+    "@jasonTM17/fs-guard": "*",
+    "@jasonTM17/exec-guard": "*"
   },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/",
+    "access": "public"
+  },
+  "license": "MIT",
   "repository": "https://github.com/JasonTM17/RepoMedic_AI"
 }

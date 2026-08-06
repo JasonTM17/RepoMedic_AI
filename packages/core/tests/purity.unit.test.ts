@@ -26,7 +26,17 @@ const FORBIDDEN_IMPORTS = [
 const CORE_SRC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 
 /** Phase-3+ directories that intentionally own I/O. */
-const PHASE_3_EXCLUDED = new Set(["fs", "process", "model", "tools", "checks", "agents", "workflows", "approval", "tracing"]);
+const PHASE_3_EXCLUDED = new Set([
+  "fs",
+  "process",
+  "model",
+  "tools",
+  "checks",
+  "agents",
+  "workflows",
+  "approval",
+  "tracing",
+]);
 
 async function listPhase2SourceFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
