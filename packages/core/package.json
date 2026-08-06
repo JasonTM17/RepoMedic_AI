@@ -20,7 +20,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "zod": "^3.24.1",
+    "zod": "^4.4.3",
     "@jasonTM17/fs-guard": "^0.1.0",
     "@jasonTM17/exec-guard": "^0.1.0"
   },
