@@ -8,6 +8,8 @@ export default tseslint.config(
       "**/.next/**",
       "**/coverage/**",
       "**/dist/**",
+      "**/out/**",
+      "**/build/**",
       "node_modules/**",
       "plans/**",
       "reports/**",
