@@ -47,7 +47,7 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@types/supertest": "^6.0.3",
-    "eslint": "^9.29.0",
+    "eslint": "^10.8.0",
     "prettier": "^3.5.3",
     "supertest": "^7.1.1",
     "tsx": "^4.19.4",

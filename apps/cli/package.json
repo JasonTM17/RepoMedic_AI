@@ -7,7 +7,7 @@
     "repomedic": "./dist/index.js"
   },
   "dependencies": {
-    "commander": "^13.1.0"
+    "commander": "^15.0.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
