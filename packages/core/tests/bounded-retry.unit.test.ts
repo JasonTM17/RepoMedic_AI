@@ -1,10 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi } from "vitest";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { runBoundedRetry } from "../src/workflows/retry/bounded-retry.js";
 import { FakeModelAdapter } from "../src/model/fake-model.js";
 import type { PatchProposal } from "../src/domain/entities.js";
 import * as revertPatchToolMod from "../src/tools/patch/revert-patch-tool.js";
 import { patchOk } from "../src/tools/patch/patch-result.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, "../../..");
 
 describe("Bounded Retry Workflow", () => {
   it("returns failed immediately when approved=false", async () => {
@@ -13,7 +18,7 @@ describe("Bounded Retry Workflow", () => {
       proposal: {} as any,
       issues: [],
       approved: false,
-      root: "d:/RepoMedic_AI",
+      root: repoRoot,
     });
     expect(result.success).toBe(false);
     expect(result.finalStatus).toBe("failed");
@@ -23,7 +28,7 @@ describe("Bounded Retry Workflow", () => {
   it("returns success on first attempt when author succeeds and reviewer passes", async () => {
     const proposal: PatchProposal = {
       id: "p1",
-      target: { rootPath: "d:/RepoMedic_AI" },
+      target: { rootPath: repoRoot },
       operations: [],
       status: "draft",
       humanApprovalRequired: true,
@@ -34,7 +39,7 @@ describe("Bounded Retry Workflow", () => {
       proposal,
       issues: [],
       approved: true,
-      root: "d:/RepoMedic_AI",
+      root: repoRoot,
       checksToRun: [
         { name: "fast", command: "node", args: ["--version"], timeoutMs: 5000 },
       ],
@@ -50,7 +55,7 @@ describe("Bounded Retry Workflow", () => {
     );
     const proposal: PatchProposal = {
       id: "p1",
-      target: { rootPath: "d:/RepoMedic_AI" },
+      target: { rootPath: repoRoot },
       operations: [],
       status: "draft",
       humanApprovalRequired: true,
@@ -61,7 +66,7 @@ describe("Bounded Retry Workflow", () => {
       proposal,
       issues: [],
       approved: true,
-      root: "d:/RepoMedic_AI",
+      root: repoRoot,
       maxRetries: 2,
       checksToRun: [
         {

@@ -1,10 +1,15 @@
 import { describe, it, expect } from "vitest";
 import * as os from "node:os";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { readFileTool } from "../src/tools/repo/read-file-tool.js";
 import { listDirTool } from "../src/tools/repo/list-dir-tool.js";
 import { grepTool } from "../src/tools/repo/grep-tool.js";
 import { gitLogTool } from "../src/tools/repo/git-log-tool.js";
 import { gitDiffTool } from "../src/tools/repo/git-diff-tool.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, "../../..");
 
 describe("Repo Tools", () => {
   it("readFileTool returns fail (not throw) for blocked path", async () => {
@@ -31,7 +36,7 @@ describe("Repo Tools", () => {
 
   it("grepTool returns success result shape", async () => {
     const result = await grepTool({
-      root: "d:/RepoMedic_AI",
+      root: repoRoot,
       pattern: "import",
     });
     expect(result.success).toBe(true);
@@ -42,7 +47,7 @@ describe("Repo Tools", () => {
   });
 
   it("gitLogTool returns success result shape", async () => {
-    const result = await gitLogTool({ root: "d:/RepoMedic_AI" });
+    const result = await gitLogTool({ root: repoRoot });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(typeof result.data?.log).toBe("string");
@@ -51,7 +56,7 @@ describe("Repo Tools", () => {
   });
 
   it("gitDiffTool returns success result shape", async () => {
-    const result = await gitDiffTool({ root: "d:/RepoMedic_AI" });
+    const result = await gitDiffTool({ root: repoRoot });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(typeof result.data?.diff).toBe("string");
