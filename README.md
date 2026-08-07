@@ -26,8 +26,8 @@
 - **Security-First Design**: Path allowlisting, mutation policies, and bounded execution
 - **Multi-Platform Support**: Works on Windows, macOS, and Linux
 - **CLI repair workflow**: Run the guarded triage and patch pipeline locally
-- **API/Web scaffolds**: Health and readiness surfaces exist; repair dashboard
-  endpoints remain deferred
+- **API/Web repair workflow**: Diagnose, review evidence, approve/reject, and
+  run bounded guarded patches through the local API and dashboard
 
 ## Quick Start
 
@@ -76,19 +76,22 @@ npm run repomedic -- triage /path/to/repository
 node apps/cli/dist/index.js triage /path/to/repository
 ```
 
-### API and web scaffolds
+### API and web dashboard
 
 ```bash
-# Start the web scaffold
+# Start the dashboard
 npm run dev:web
 
-# Start the API health/readiness scaffold
+# Start the API
 npm run dev:api
 ```
 
-The CLI is the implemented repair entry point. The API currently exposes
-`/healthz`, `/readyz`, and `/metrics`; the web app currently exposes its local
-health route and placeholder content while repair endpoints are being built.
+The API exposes `/healthz`, `/readyz`, `/metrics`, and the repair lifecycle at
+`/v1/repairs`. The dashboard connects through the generated
+`@jasonTM17/api-client` package. By default, runs are local and in-memory; an
+API restart clears them. Select the `openai` backend only after configuring
+`OPENAI_API_KEY`; the `fake` backend is deterministic and useful for local UI
+verification.
 
 ## Architecture
 
@@ -171,7 +174,7 @@ npm run format
 
 # Start development servers
 npm run dev:api    # Start API server
-npm run dev:web    # Start web scaffold
+npm run dev:web    # Start the dashboard
 ```
 
 ## Contributing

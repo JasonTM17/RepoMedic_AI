@@ -1,4 +1,4 @@
 export const dashboardTitle = "RepoMedic";
 
 export const dashboardDescription =
-  "Local repair runs, evidence review, and human approval will appear here.";
+  "Diagnose a local repository, review evidence, and use human approval for guarded patches.";

@@ -3,8 +3,8 @@
 ## Purpose
 
 The CLI provides the scriptable local interface for RepoMedic's guarded repair
-workflow. The API currently exposes health/readiness scaffolding and does not
-yet expose this repair flow. The CLI will not bypass approval, patch, or
+workflow. The Express API and Next.js dashboard expose the same workflow through
+the generated OpenAPI client. The CLI will not bypass approval, patch, or
 command policy.
 
 ## API surface
