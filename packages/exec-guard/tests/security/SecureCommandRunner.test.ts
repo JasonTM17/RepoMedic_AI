@@ -44,6 +44,18 @@ describe("SecureCommandRunner", () => {
     }
   });
 
+  it("should reject a sibling path that only shares the root prefix", async () => {
+    const siblingDir = `${tempRoot}-evil`;
+    await fs.mkdir(siblingDir);
+    try {
+      await expect(
+        runner.runCommand("node", ["-v"], { cwd: siblingDir }),
+      ).rejects.toThrow(/outside the repository root/);
+    } finally {
+      await fs.rm(siblingDir, { recursive: true, force: true });
+    }
+  });
+
   it("should terminate process on timeout", async () => {
     // A command that sleeps for 10 seconds
     const start = Date.now();

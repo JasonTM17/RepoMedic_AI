@@ -13,7 +13,7 @@ interface TriageOptions {
 /** Parses a CLI flag value as a strictly positive integer, or throws. */
 function parsePositiveInteger(value: string, flagName: string): number {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     throw new Error(`${flagName} must be a positive integer, got: "${value}"`);
   }
   return parsed;
@@ -140,6 +140,7 @@ export function createProgram(): Command {
           proposal: coordResult.proposal,
           issues: coordResult.issues,
           approved: true,
+          allowlist,
           root,
           maxRetries,
         });
@@ -151,10 +152,12 @@ export function createProgram(): Command {
         return;
       }
 
-      if (retryResult.finalStatus === "applied") {
-        process.stdout.write(
-          `\nPatch applied successfully after ${retryResult.attempts} attempt(s).\n${retryResult.summary}\n`,
-        );
+      if (retryResult.success) {
+        const message =
+          retryResult.finalStatus === "applied"
+            ? `Patch applied successfully after ${retryResult.attempts} attempt(s).`
+            : `No patch operations were applied after ${retryResult.attempts} attempt(s).`;
+        process.stdout.write(`\n${message}\n${retryResult.summary}\n`);
         return;
       }
 

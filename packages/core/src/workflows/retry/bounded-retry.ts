@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 import type { ModelAdapter } from "../../model/model-adapter.js";
 import type { PatchProposal, DiagnosisIssue } from "../../domain/entities.js";
 import { runPatchAuthorAgent } from "../../agents/patcher/patch-author-agent.js";
@@ -10,6 +12,7 @@ export interface BoundedRetryOptions {
   proposal: PatchProposal;
   issues: DiagnosisIssue[];
   approved: boolean;
+  allowlist: readonly string[];
   root: string;
   maxRetries?: number; // default 3
   checksToRun?: CheckCommand[];
@@ -18,7 +21,7 @@ export interface BoundedRetryOptions {
 export interface BoundedRetryResult {
   success: boolean;
   attempts: number;
-  finalStatus: "applied" | "failed" | "reverted";
+  finalStatus: "applied" | "no-op" | "failed" | "reverted" | "revert-failed";
   summary: string;
 }
 
@@ -35,6 +38,7 @@ export async function runBoundedRetry(
     proposal,
     issues,
     approved,
+    allowlist,
     root,
     maxRetries = 3,
     checksToRun,
@@ -46,6 +50,25 @@ export async function runBoundedRetry(
       attempts: 0,
       finalStatus: "failed",
       summary: "Not approved",
+    };
+  }
+
+  if (!Number.isSafeInteger(maxRetries) || maxRetries < 1) {
+    return {
+      success: false,
+      attempts: 0,
+      finalStatus: "failed",
+      summary: "maxRetries must be a positive safe integer.",
+    };
+  }
+
+  const canonicalRoot = resolve(root);
+  if (canonicalRoot !== resolve(proposal.target.rootPath)) {
+    return {
+      success: false,
+      attempts: 0,
+      finalStatus: "failed",
+      summary: "Workflow root must match proposal.target.rootPath.",
     };
   }
 
@@ -61,6 +84,7 @@ export async function runBoundedRetry(
       proposal,
       issues,
       approved,
+      allowlist,
       ...(previousFailures !== undefined
         ? { previousFailures: previousFailures as string }
         : {}),
@@ -76,11 +100,30 @@ export async function runBoundedRetry(
       };
     }
 
+    if (authorResult.appliedOperations.length === 0) {
+      if (proposal.operations.length > 0) {
+        return {
+          success: false,
+          attempts: attempt,
+          finalStatus: "failed",
+          summary:
+            "Patch author completed without applying the non-empty proposal.",
+        };
+      }
+
+      return {
+        success: true,
+        attempts: attempt,
+        finalStatus: "no-op",
+        summary: "Patch author completed without applying operations.",
+      };
+    }
+
     // Step 2: Review
     const reviewResult = await runReviewerAgent({
       model,
       proposal,
-      root,
+      root: canonicalRoot,
       ...(checksToRun !== undefined
         ? { checksToRun: checksToRun as CheckCommand[] }
         : {}),
@@ -96,9 +139,19 @@ export async function runBoundedRetry(
     }
 
     // Step 3: Revert and record failures for next attempt
-    const pathsToRevert = authorResult.appliedOperations.map((op) => op.path);
-    if (pathsToRevert.length > 0) {
-      await revertPatchTool({ root, paths: pathsToRevert });
+    if (authorResult.appliedOperations.length > 0) {
+      const revertResult = await revertPatchTool({
+        root: canonicalRoot,
+        operations: authorResult.appliedOperations,
+      });
+      if (!revertResult.success) {
+        return {
+          success: false,
+          attempts: attempt,
+          finalStatus: "revert-failed",
+          summary: `Review failed and revert failed: ${revertResult.error ?? revertResult.message}`,
+        };
+      }
     }
 
     previousFailures = reviewResult.summary;

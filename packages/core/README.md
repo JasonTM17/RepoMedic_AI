@@ -2,12 +2,18 @@
 
 ## Purpose
 
-Core will contain deterministic repair workflow, security policy, tool execution, and model adapter contracts shared by the API and CLI. It must never directly implement a user interface.
+Core contains the deterministic repair workflow, security policy, tool
+execution, and model adapter contracts shared by the API and CLI. It never
+directly implements a user interface.
 
 ## API surface
 
 - Public TypeScript exports from `src/index.ts`.
-- Workflow APIs are added in later phases.
+- Coordinator, patch-author, reviewer, and bounded-retry workflow APIs.
+- Patch application requires an allowlisted, approved operation with exact
+  unified-diff hunks; retry rollback uses the exact applied operations.
+- A proposal with no operations may complete as a successful `no-op`; a
+  non-empty proposal that applies nothing is reported as failed/incomplete.
 
 ## Env vars
 

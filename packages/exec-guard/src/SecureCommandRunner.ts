@@ -35,7 +35,12 @@ export class SecureCommandRunner {
       );
     }
 
-    if (!realCwd.startsWith(this.repoRoot)) {
+    const relativeCwd = path.relative(this.repoRoot, realCwd);
+    if (
+      relativeCwd === ".." ||
+      relativeCwd.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativeCwd)
+    ) {
       throw new Error(
         `Invalid cwd: ${cwd} is outside the repository root ${this.repoRoot}`,
       );

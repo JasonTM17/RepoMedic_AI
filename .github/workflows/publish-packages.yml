@@ -5,9 +5,10 @@ name: Publish Packages
 #      `packages/*/package.json`. Commit that change on `main`.
 #   2. Create and push a tag matching `v*` (e.g. `git tag v0.2.0 && git push
 #      origin v0.2.0`) — this triggers the workflow below.
-#   3. Alternatively, run this workflow manually via `workflow_dispatch` (for
-#      example to retry a partially failed release). Each publish step checks
-#      whether that package's current version already exists on GitHub
+#   3. Alternatively, run this workflow manually via `workflow_dispatch` with
+#      `release_tag` set to an existing tag pointing at the checked-out commit
+#      (for example to retry a partially failed release). Each publish step
+#      checks whether that package's current version already exists on GitHub
 #      Packages and skips it if so, so re-running is safe.
 #   4. Packages are independent — none of the four declares a dependency on
 #      another @jasonTM17 package — so there is no required publish order and
@@ -17,6 +18,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing vX.Y.Z tag pointing at the checked-out commit"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -28,6 +34,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,57 +47,84 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate release tag
+        run: node scripts/validate-release-tag.mjs
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+
+      - name: Verify generated API client
+        run: npm run generate:api-client
+
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev
+
       - name: Build packages
         run: npm run build:core && npm run build:fs-guard && npm run build:exec-guard && npm run build:api-client
 
       - name: Run tests
         run: npm test
 
+      - name: Validate package archives
+        run: npm run package:check
+
       # Each package is published independently: none of the four declares a
       # dependency on another @jasonTM17 package, so there is no required
       # publish order. A version check keeps re-running this workflow (e.g. a
       # re-tagged release, or workflow_dispatch after a partial failure) from
       # hard-failing on packages whose version was already published.
-      - name: Publish @jasonTM17/core
+      - name: Publish packages
+        shell: bash
         run: |
-          VERSION=$(node -p "require('./packages/core/package.json').version")
-          if npm view "@jasonTM17/core@$VERSION" version >/dev/null 2>&1; then
-            echo "@jasonTM17/core@$VERSION already published; skipping"
-          else
-            npm publish --workspace=@jasonTM17/core
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          set -euo pipefail
 
-      - name: Publish @jasonTM17/fs-guard
-        run: |
-          VERSION=$(node -p "require('./packages/fs-guard/package.json').version")
-          if npm view "@jasonTM17/fs-guard@$VERSION" version >/dev/null 2>&1; then
-            echo "@jasonTM17/fs-guard@$VERSION already published; skipping"
-          else
-            npm publish --workspace=@jasonTM17/fs-guard
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          publish_package() {
+            local package_name="$1"
+            local workspace="$2"
+            local version
+            local encoded_name
+            local http_status
 
-      - name: Publish @jasonTM17/exec-guard
-        run: |
-          VERSION=$(node -p "require('./packages/exec-guard/package.json').version")
-          if npm view "@jasonTM17/exec-guard@$VERSION" version >/dev/null 2>&1; then
-            echo "@jasonTM17/exec-guard@$VERSION already published; skipping"
-          else
-            npm publish --workspace=@jasonTM17/exec-guard
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            version=$(node -p "require('./${workspace}/package.json').version")
+            encoded_name=$(node -p 'encodeURIComponent(process.argv[1])' "$package_name")
+            http_status=$(curl --silent --show-error --output /dev/null \
+              --write-out '%{http_code}' \
+              --header "Authorization: Bearer ${NODE_AUTH_TOKEN}" \
+              "https://npm.pkg.github.com/${encoded_name}/${version}" || true)
 
-      - name: Publish @jasonTM17/api-client
-        run: |
-          VERSION=$(node -p "require('./packages/api-client/package.json').version")
-          if npm view "@jasonTM17/api-client@$VERSION" version >/dev/null 2>&1; then
-            echo "@jasonTM17/api-client@$VERSION already published; skipping"
-          else
-            npm publish --workspace=@jasonTM17/api-client
+            if [ "$http_status" = "200" ]; then
+              echo "${package_name}@${version} already published; skipping"
+              return 0
+            fi
+
+            if [ "$http_status" = "404" ]; then
+              if ! npm publish "--workspace=${workspace}" --registry=https://npm.pkg.github.com/; then
+                echo "Publishing ${package_name}@${version} failed." >&2
+                return 1
+              fi
+              return 0
+            fi
+
+            echo "Unable to check ${package_name}@${version} on GitHub Packages (HTTP ${http_status:-unknown})." >&2
+            return 1
+          }
+
+          failures=0
+          while IFS='|' read -r package_name workspace; do
+            if publish_package "$package_name" "$workspace"; then
+              :
+            else
+              failures=$((failures + 1))
+            fi
+          done <<'PACKAGES'
+          @jasonTM17/core|packages/core
+          @jasonTM17/fs-guard|packages/fs-guard
+          @jasonTM17/exec-guard|packages/exec-guard
+          @jasonTM17/api-client|packages/api-client
+          PACKAGES
+
+          if [ "$failures" -gt 0 ]; then
+            echo "${failures} package publication(s) failed." >&2
+            exit 1
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

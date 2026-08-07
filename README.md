@@ -25,7 +25,9 @@
 - **Guarded Patch Application**: Apply patches only after human approval
 - **Security-First Design**: Path allowlisting, mutation policies, and bounded execution
 - **Multi-Platform Support**: Works on Windows, macOS, and Linux
-- **CLI & Web Interface**: Use via command line or web dashboard
+- **CLI repair workflow**: Run the guarded triage and patch pipeline locally
+- **API/Web scaffolds**: Health and readiness surfaces exist; repair dashboard
+  endpoints remain deferred
 
 ## Quick Start
 
@@ -52,17 +54,15 @@ npm run build
 npm test
 ```
 
-### Docker Deployment
+### Local Docker validation
 
 ```bash
-# Pull and run with Docker Compose
-docker compose up -d
-
-# Or pull images individually
-docker pull nguyenson1710/repomedic-api:latest
-docker pull nguyenson1710/repomedic-web:latest
-docker pull nguyenson1710/repomedic-cli:latest
+# Build and run the local Compose services
+docker compose up --build
 ```
+
+Registry publication and deployment are separate release activities; this
+repository does not claim that the example images are currently published.
 
 ## Usage
 
@@ -76,17 +76,19 @@ npm run repomedic -- triage /path/to/repository
 node apps/cli/dist/index.js triage /path/to/repository
 ```
 
-### Web Dashboard
+### API and web scaffolds
 
 ```bash
-# Start the web dashboard
+# Start the web scaffold
 npm run dev:web
 
-# Start the API server
+# Start the API health/readiness scaffold
 npm run dev:api
 ```
 
-Access the dashboard at `http://localhost:3000`
+The CLI is the implemented repair entry point. The API currently exposes
+`/healthz`, `/readyz`, and `/metrics`; the web app currently exposes its local
+health route and placeholder content while repair endpoints are being built.
 
 ## Architecture
 
@@ -121,8 +123,10 @@ Access the dashboard at `http://localhost:3000`
 
 | Component             | Protection                                         |
 | --------------------- | -------------------------------------------------- |
-| `SecureFileAccessor`  | TOCTOU-safe realpath + path allowlisting           |
-| `SecureCommandRunner` | No shell injection, cwd confinement, timeouts      |
+| `SecureFileSystem`    | Core runtime realpath + path allowlisting          |
+| `boundedExec`         | Core runtime command allowlist, no shell, bounds   |
+| `SecureFileAccessor`  | Standalone package realpath + policy callback      |
+| `SecureCommandRunner` | Standalone package no-shell execution + bounds     |
 | `MutationPolicy`      | Blocks `.git/`, `.env*`, and other sensitive paths |
 | `PathAllowlistPolicy` | Rejects `../`, absolute paths, symlink escapes     |
 
@@ -167,7 +171,7 @@ npm run format
 
 # Start development servers
 npm run dev:api    # Start API server
-npm run dev:web    # Start web dashboard
+npm run dev:web    # Start web scaffold
 ```
 
 ## Contributing

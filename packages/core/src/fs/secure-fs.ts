@@ -1,7 +1,9 @@
 /**
  * Secure filesystem layer: all read/write operations validate paths via
  * `PathAllowlistPolicy` + `fs.realpath` confinement before touching the
- * filesystem. Prevents path traversal, symlink escapes, and TOCTOU attacks.
+ * filesystem. Mitigates path traversal and symlink escapes by re-validating
+ * immediately before access; filesystem operations are not atomic and this is
+ * not an absolute TOCTOU guarantee.
  *
  * Contract (mirrors phase-2 TOCTOU note):
  *   A syntactic policy pass (checkPathAllowlist) is NOT sufficient alone.

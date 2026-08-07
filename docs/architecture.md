@@ -6,16 +6,26 @@ RepoMedic is a local-first AI bug triage and guarded patch assistant, organized 
 
 ## Packages
 
-- **core**: Deterministic domain entities, schemas, and policy logic. Contains `PathAllowlistPolicy`, `MutationPolicy`, agent abstractions, workflows, and tracing.
-- **fs-guard**: Secure filesystem wrapper providing `SecureFileAccessor` with TOCTOU protection and symlink confinement.
-- **exec-guard**: Secure command execution with `SecureCommandRunner` enforcing timeouts, buffer limits, and environment sanitization.
+- **core**: Deterministic domain entities, schemas, policy logic, the active
+  `SecureFileSystem`/`boundedExec` runtime boundaries, agent abstractions,
+  workflows, and tracing.
+- **fs-guard**: Standalone reusable filesystem wrapper providing
+  `SecureFileAccessor` with realpath confinement and a caller-supplied policy
+  callback. It is configured for independent publication and is not a core
+  runtime dependency today.
+- **exec-guard**: Standalone reusable command execution wrapper providing
+  `SecureCommandRunner` with cwd confinement, timeouts, output limits, and an
+  explicit environment allowlist. It is configured for independent
+  publication and is not a core runtime dependency today.
 - **api-client**: Generated OpenAPI client for interacting with the API.
 
 ## Apps
 
 - **cli**: Command-line interface for running RepoMedic commands locally (`apps/cli`).
-- **api**: Express REST API service for core functionalities (`apps/api`).
-- **web**: Next.js dashboard for visualizing results and managing workflows (`apps/web`).
+- **api**: Express health/readiness/metrics scaffold; repair endpoints remain
+  deferred (`apps/api`).
+- **web**: Next.js dashboard scaffold; repair visualization and workflow
+  management remain deferred (`apps/web`).
 
 ## Core Modules
 
@@ -24,8 +34,12 @@ The `core` package encapsulates the fundamental logic of RepoMedic:
 - **Domain**: Data models and domain entities (`RepositoryTarget`, `DiagnosisIssue`, `PatchOperation`, `PatchProposal`, `CheckResult`, `Approval`, `MutationDecision`).
 - **Schemas**: Zod runtime-validated schemas for all public boundary values.
 - **Policy**: Access and modification policies (`PathAllowlistPolicy`, `MutationPolicy`) — the single gate all mutations pass through.
-- **SecureFS**: Secure file system abstractions (moved to `packages/fs-guard`).
-- **BoundedExec**: Safe command execution (moved to `packages/exec-guard`).
+- **SecureFS**: Active core filesystem abstraction with syntactic policy checks
+  and resolved-root confinement. `packages/fs-guard` contains the separate
+  reusable `SecureFileAccessor` boundary.
+- **BoundedExec**: Active core command allowlist, argument-array execution,
+  timeout, and output bounds. `packages/exec-guard` contains the separate
+  reusable `SecureCommandRunner` boundary.
 - **Tools**: Reusable utilities for repository operations and patch management.
 - **Agents**: AI agent definitions for exploration, patching, and review.
 - **Workflows**: Coordinator and bounded-retry workflow orchestration.
@@ -45,17 +59,17 @@ flowchart TD
     subgraph Core[Core Package]
         Workflows --> Agents
         Agents --> Tools
-        Tools --> SecureFS
-        Tools --> BoundedExec
-        SecureFS --> Policy
-        BoundedExec --> Policy
+        Tools --> CoreSecureFS[core SecureFileSystem]
+        Tools --> CoreBoundedExec[core boundedExec]
+        CoreSecureFS --> Policy
+        CoreBoundedExec --> Policy
         Workflows --> Domain
         Workflows --> Tracing
     end
 
-    subgraph Guards[Security Packages]
-        SecureFS --- FsGuard[fs-guard: SecureFileAccessor]
-        BoundedExec --- ExecGuard[exec-guard: SecureCommandRunner]
+    subgraph Guards[Standalone Security Packages]
+        FsGuard[fs-guard: SecureFileAccessor]
+        ExecGuard[exec-guard: SecureCommandRunner]
     end
 
     Policy --> Domain

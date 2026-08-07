@@ -12,36 +12,54 @@ The foundational path validation policy. Normalizes paths (POSIX + Windows), rej
 
 Defines rules for modifying files. Enforces allowed operation kinds, allowlist gate, and denylist for protected paths (`.git/`, `.env*`, credentials). Controls `humanApprovalRequired` passthrough and returns `MutationDecision` with policy violations.
 
-### SecureFileAccessor (packages/fs-guard)
+### SecureFileSystem (packages/core)
 
-A stateful, secure wrapper around `fs/promises`. Performs realpath resolution via `fs.realpath` and re-validates against the `PathAllowlistPolicy` to guarantee the actual path remains confined inside the repository root. Prevents TOCTOU attacks and symlink escape attempts.
+The active core runtime wrapper around `fs/promises`. It performs syntactic
+allowlist checks, resolves paths before access, re-validates root confinement,
+blocks protected paths, and requires approval for mutations.
 
 Key behaviors:
 
-- Resolves all paths using `fs.realpath` before validation
-- Rejects any resolved path that escapes the repository root
+- Resolves paths using `fs.realpath` before access
+- Rejects resolved paths that escape the repository root
 - Blocks access to `.git/`, `.env`, and other protected paths
-- Provides: `readFile`, `writeFile`, `listFiles`, `statFile`
+- Bounds file and directory reads
+
+### SecureFileAccessor (packages/fs-guard)
+
+This is a separately published reusable wrapper. It performs realpath
+confinement and delegates relative-path policy decisions to the policy object
+provided by its caller. It is not currently wired as the implementation used
+by `packages/core`.
+
+### boundedExec (packages/core)
+
+The active core command boundary allows a fixed command set, uses explicit
+argument arrays with `shell: false`, enforces timeouts, and caps combined
+output. Its default environment inherits the current process environment, so
+callers requiring an explicit environment allowlist should use the standalone
+`SecureCommandRunner` package.
 
 ### SecureCommandRunner (packages/exec-guard)
 
-A confined execution environment for running Git commands, linters, formatters, and test suites.
+This separately published reusable runner enforces repository-root cwd
+confinement, uses explicit argument arrays without a shell, applies timeouts,
+bounds output, and accepts an explicit environment allowlist.
 
 Key behaviors:
 
-- Enforces strict working directory confinement (repository root or valid subdirectory)
-- Uses `child_process.spawn` with explicit argument arrays (no shell injection)
-- Implements process timeouts with SIGTERM/SIGKILL for runaway tasks
-- Limits stdout/stderr buffer sizes to prevent out-of-memory crashes
-- Sanitizes environment variables (only explicit allowlist variables inherited)
-- Enforces max output bytes with truncation
-
 ## Security Boundaries
 
-| Component         | Protection                                     |
-| ----------------- | ---------------------------------------------- |
-| File Access       | TOCTOU-safe realpath + allowlist               |
-| Path Traversal    | Reject `../`, absolute paths, symlink escapes  |
-| Command Execution | No shell, cwd confinement, timeout enforcement |
-| Environment       | Explicit allowlist only, no full inheritance   |
-| Output Size       | Configurable max bytes with truncation         |
+| Component         | Protection                                                                          |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| File Access       | Realpath revalidation + allowlist; filesystem race limits remain                    |
+| Path Traversal    | Reject `../`, absolute paths, symlink escapes                                       |
+| Command Execution | No shell, cwd confinement, timeout enforcement                                      |
+| Environment       | Explicit allowlist in `exec-guard`; inherited by core `boundedExec` unless supplied |
+| Output Size       | Configurable max bytes with truncation                                              |
+
+### Patch rollback boundary
+
+Automatic retry applies only exact unified-diff operations with hunks. Review
+failure is reverted with `git apply --reverse` using those exact operations;
+path-only rollback is rejected so unrelated dirty files are not restored over.

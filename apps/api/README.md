@@ -2,14 +2,18 @@
 
 ## Purpose
 
-The API exposes the local repair workflow to the dashboard and other trusted local clients. It will call `@jasonTM17/core`; it does not embed frontend behavior.
+The API currently provides local health, readiness, and metrics endpoints. It
+will expose the guarded repair workflow to the dashboard and trusted local
+clients after the repair endpoints are implemented; it does not embed frontend
+behavior.
 
 ## API surface
 
 - `GET /healthz` — liveness.
 - `GET /readyz` — readiness.
 - `GET /metrics` — Prometheus-compatible metrics.
-- Repair endpoints will be added from `docs/openapi.yaml` in later phases.
+- Repair endpoints are not implemented in the current scope; their contract
+  source is `docs/openapi.yaml`.
 
 ## Env vars
 

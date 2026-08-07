@@ -5,9 +5,9 @@ import crypto from "node:crypto";
 
 import { evaluateMutationPolicy } from "../../policy/mutation.js";
 import { boundedExec } from "../../process/index.js";
-import { SecureFileSystem } from "../../fs/secure-fs.js";
 import type { PatchProposal } from "../../domain/entities.js";
 import { patchOk, patchFail, type PatchToolResult } from "./patch-result.js";
+import { formatPatchOperations } from "./create-patch-tool.js";
 
 export interface ApplyPatchInput {
   root: string;
@@ -35,12 +35,34 @@ export async function applyPatchTool(
     }
   }
 
+  const unsupportedOperations = proposal.operations.filter(
+    (op) => op.kind === "rename" || op.kind === "chmod",
+  );
+  if (unsupportedOperations.length > 0) {
+    return patchFail(
+      `Refusing unsupported non-content operations: ${unsupportedOperations
+        .map((op) => `${op.kind} ${op.path}`)
+        .join(", ")}`,
+    );
+  }
+
+  const missingHunks = proposal.operations.filter(
+    (op) => !op.hunks || op.hunks.length === 0,
+  );
+  if (missingHunks.length > 0) {
+    return patchFail(
+      `Refusing operations without exact diff hunks: ${missingHunks
+        .map((op) => `${op.kind} ${op.path}`)
+        .join(", ")}`,
+    );
+  }
+
   // Apply hunks that have diff content via git apply
   const hunkedOps = proposal.operations.filter(
     (op) => op.hunks && op.hunks.length > 0,
   );
   if (hunkedOps.length > 0) {
-    const diffText = hunkedOps.flatMap((op) => op.hunks ?? []).join("\n");
+    const diffText = formatPatchOperations(hunkedOps);
 
     const tmpdir = os.tmpdir();
     const tempName = crypto.randomBytes(16).toString("hex") + ".patch";
@@ -48,27 +70,36 @@ export async function applyPatchTool(
 
     try {
       await fs.writeFile(tempPath, diffText, "utf8");
+      const checkResult = await boundedExec(
+        "git",
+        ["apply", "--check", tempPath],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+        },
+      );
+      if (checkResult.exitCode !== 0) {
+        return patchFail(
+          `git apply check failed: ${checkResult.stderr || checkResult.stdout || "unknown patch conflict"}`,
+        );
+      }
+
+      // `--reject` is intentionally omitted: after the clean preflight,
+      // git's default all-or-nothing apply behavior is the transaction
+      // boundary. Unexpected failure is surfaced instead of guessed rollback.
       const result = await boundedExec("git", ["apply", tempPath], {
         cwd: root,
         timeoutMs: 30_000,
       });
       if (result.exitCode !== 0) {
-        return patchFail(`git apply failed: ${result.stderr}`);
+        return patchFail(
+          `git apply failed after preflight: ${result.stderr || result.stdout || "unknown apply failure"}`,
+        );
       }
     } catch (err) {
       return patchFail(err instanceof Error ? err.message : String(err));
     } finally {
       await fs.unlink(tempPath).catch(() => {});
-    }
-  }
-
-  // Handle create/delete ops via SecureFileSystem
-  const sfs = new SecureFileSystem({ root, allowlist });
-  for (const op of proposal.operations) {
-    if (op.kind === "create" && (!op.hunks || op.hunks.length === 0)) {
-      await sfs.createFile(op.path, "", approved);
-    } else if (op.kind === "delete" && (!op.hunks || op.hunks.length === 0)) {
-      await sfs.deleteFile(op.path, approved);
     }
   }
 

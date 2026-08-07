@@ -2,12 +2,15 @@
 
 ## Purpose
 
-The web application is the local dashboard for submitting repair runs, reviewing evidence, approving patches, and viewing reports. It calls the separate API through generated client code only.
+The web application is a local dashboard scaffold. Its repair-run submission,
+evidence review, approval, and report views are deferred until the separate
+API and generated client surfaces are implemented.
 
 ## API surface
 
 - `GET /healthz` — local web health route.
-- The generated `@jasonTM17/api-client` package will own repair API calls in a later phase.
+- The generated `@jasonTM17/api-client` package will own repair API calls when
+  those API endpoints are implemented.
 
 ## Env vars
 
