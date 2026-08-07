@@ -27,15 +27,16 @@ export async function applyPatchTool(
 ): Promise<PatchToolResult> {
   const { root, allowlist, proposal, approved } = input;
 
-  if (proposal.digest !== undefined) {
-    if (calculatePatchDigest(proposal.operations) !== proposal.digest) {
-      return patchFail("Immutable patch digest does not match its operations.");
-    }
-    try {
-      await verifyPatchPreconditions(root, allowlist, proposal.operations);
-    } catch (error) {
-      return patchFail(error instanceof Error ? error.message : String(error));
-    }
+  if (proposal.operations.length > 0 && proposal.digest === undefined) {
+    return patchFail(
+      "Immutable patch digest and old-file preconditions are required before applying operations.",
+    );
+  }
+  if (
+    proposal.digest !== undefined &&
+    calculatePatchDigest(proposal.operations) !== proposal.digest
+  ) {
+    return patchFail("Immutable patch digest does not match its operations.");
   }
 
   // Gate every operation through MutationPolicy before touching the filesystem
@@ -72,6 +73,14 @@ export async function applyPatchTool(
         .map((op) => `${op.kind} ${op.path}`)
         .join(", ")}`,
     );
+  }
+
+  if (proposal.digest !== undefined) {
+    try {
+      await verifyPatchPreconditions(root, allowlist, proposal.operations);
+    } catch (error) {
+      return patchFail(error instanceof Error ? error.message : String(error));
+    }
   }
 
   // Apply hunks that have diff content via git apply

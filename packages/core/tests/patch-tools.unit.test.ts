@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, it, expect } from "vitest";
 import { createPatchFromDiff } from "../src/tools/patch/create-patch-tool.js";
+import type { PatchProposal } from "../src/domain/entities.js";
 import { applyPatchTool } from "../src/tools/patch/apply-patch-tool.js";
 import {
   calculatePatchDigest,
@@ -14,6 +15,23 @@ import { revertPatchTool } from "../src/tools/patch/revert-patch-tool.js";
 import { patchOk, patchFail } from "../src/tools/patch/patch-result.js";
 
 const execFile = promisify(execFileCallback);
+
+async function immutableProposal(
+  root: string,
+  allowlist: readonly string[],
+  proposal: PatchProposal,
+): Promise<PatchProposal> {
+  const operations = await capturePatchPreconditions(
+    root,
+    allowlist,
+    proposal.operations,
+  );
+  return {
+    ...proposal,
+    operations,
+    digest: calculatePatchDigest(operations),
+  };
+}
 
 describe("Patch Tools", () => {
   describe("createPatchFromDiff", () => {
@@ -141,7 +159,7 @@ describe("Patch Tools", () => {
         },
       });
       expect(result.success).toBe(false);
-      expect(result.error).toContain("Policy blocked operation on file.txt");
+      expect(result.error).toContain("digest and old-file preconditions");
     });
 
     it("rejects operations without exact diff hunks", async () => {
@@ -155,6 +173,9 @@ describe("Patch Tools", () => {
           status: "ready",
           humanApprovalRequired: true,
           operations: [{ id: "op-1", path: "file.txt", kind: "modify" }],
+          digest: calculatePatchDigest([
+            { id: "op-1", path: "file.txt", kind: "modify" },
+          ]),
         },
       });
       expect(result.success).toBe(false);
@@ -180,6 +201,15 @@ describe("Patch Tools", () => {
               hunks: ["@@"],
             },
           ],
+          digest: calculatePatchDigest([
+            {
+              id: "op-1",
+              path: "run.sh",
+              kind: "chmod",
+              mode: 0o755,
+              hunks: ["@"],
+            },
+          ]),
         },
       });
       expect(result.success).toBe(false);
@@ -227,13 +257,13 @@ describe("Patch Tools", () => {
         });
         const operation = parsed.operations?.[0];
         if (!operation) throw new Error("Expected a parsed patch operation");
-        const proposal = {
+        const proposal = await immutableProposal(root, ["file.txt"], {
           id: "patch-1",
           target: { rootPath: root },
           operations: [operation],
           status: "draft" as const,
           humanApprovalRequired: true,
-        };
+        });
 
         const applied = await applyPatchTool({
           root,
@@ -297,13 +327,13 @@ describe("Patch Tools", () => {
         const checked = await applyPatchTool({
           root,
           allowlist: ["gone.txt", "other.txt"],
-          proposal: {
+          proposal: await immutableProposal(root, ["gone.txt", "other.txt"], {
             id: "conflict-1",
             target: { rootPath: root },
             operations: conflicting.operations ?? [],
             status: "draft",
             humanApprovalRequired: true,
-          },
+          }),
           approved: true,
         });
         expect(checked.success).toBe(false);
@@ -325,13 +355,13 @@ describe("Patch Tools", () => {
         const appliedCreate = await applyPatchTool({
           root,
           allowlist: ["new.txt"],
-          proposal: {
+          proposal: await immutableProposal(root, ["new.txt"], {
             id: "create-1",
             target: { rootPath: root },
             operations: [createOperation],
             status: "draft",
             humanApprovalRequired: true,
-          },
+          }),
           approved: true,
         });
         expect(appliedCreate.success).toBe(true);
@@ -359,13 +389,13 @@ describe("Patch Tools", () => {
         const appliedDelete = await applyPatchTool({
           root,
           allowlist: ["gone.txt"],
-          proposal: {
+          proposal: await immutableProposal(root, ["gone.txt"], {
             id: "delete-1",
             target: { rootPath: root },
             operations: [deleteOperation],
             status: "draft",
             humanApprovalRequired: true,
-          },
+          }),
           approved: true,
         });
         expect(appliedDelete.success).toBe(true);
