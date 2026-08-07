@@ -102,6 +102,18 @@ continue mutating automatically. Select the `openai` backend only after
 configuring `OPENAI_API_KEY`; the `fake` backend is diagnosis-only and
 deterministic for local UI verification.
 
+## Visual walkthrough
+
+The walkthrough below is a captured local session of the built dashboard. It
+shows the empty state, an issue being prepared, and a completed deterministic
+diagnosis-only run. It does not claim a live model integration or a production
+patch application.
+
+![RepoMedic dashboard walkthrough](docs/images/repair-workflow.gif)
+
+See [the visual walkthrough notes](docs/showcase.md) for responsive screenshots,
+capture provenance, and the exact limits of this evidence.
+
 ## Architecture
 
 ### System Overview
