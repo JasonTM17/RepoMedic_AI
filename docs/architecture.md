@@ -22,10 +22,11 @@ RepoMedic is a local-first AI bug triage and guarded patch assistant, organized 
 ## Apps
 
 - **cli**: Command-line interface for running RepoMedic commands locally (`apps/cli`).
-- **api**: Express health/readiness/metrics scaffold; repair endpoints remain
-  deferred (`apps/api`).
-- **web**: Next.js dashboard scaffold; repair visualization and workflow
-  management remain deferred (`apps/web`).
+- **api**: Express health/readiness/metrics plus the local repair lifecycle
+  (`apps/api`). It orchestrates core diagnosis, approval, and bounded retry with
+  an in-memory run store.
+- **web**: Next.js dashboard for repair submission, evidence review, approval,
+  and result reporting (`apps/web`). It consumes only the generated client.
 
 ## Core Modules
 
@@ -74,3 +75,28 @@ flowchart TD
 
     Policy --> Domain
 ```
+
+## Repair lifecycle
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Web
+    participant API
+    participant Core
+    User->>Web: Describe issue and choose allowlist
+    Web->>API: POST /v1/repairs
+    API->>Core: Explorer diagnosis
+    Core-->>API: Issues and draft proposal
+    API-->>Web: awaiting-approval run
+    User->>Web: Review evidence
+    Web->>API: POST /v1/repairs/:id/approval
+    API->>Core: Bounded retry after approval
+    Core-->>API: Patch/check/revert result
+    API-->>Web: completed or failed run
+```
+
+The API is intentionally local-first: its run store is in memory, its root is
+configured at process startup, and browser access is restricted by an explicit
+`CORS_ORIGIN`. Durable persistence, authentication, and multi-user coordination
+remain deployment concerns rather than hidden promises of this local workflow.

@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetHealthData, GetHealthResponses, GetMetricsData, GetMetricsResponses, GetReadinessData, GetReadinessResponses } from './types.gen';
+import type { CreateRepairData, CreateRepairErrors, CreateRepairResponses, DecideRepairApprovalData, DecideRepairApprovalErrors, DecideRepairApprovalResponses, GetHealthData, GetHealthResponses, GetMetricsData, GetMetricsResponses, GetReadinessData, GetReadinessResponses, GetRepairData, GetRepairErrors, GetRepairResponses, ListRepairsData, ListRepairsResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -23,3 +23,37 @@ export const getHealth = <ThrowOnError extends boolean = false>(options?: Option
 export const getReadiness = <ThrowOnError extends boolean = false>(options?: Options<GetReadinessData, ThrowOnError>) => (options?.client ?? client).get<GetReadinessResponses, unknown, ThrowOnError>({ url: '/readyz', ...options });
 
 export const getMetrics = <ThrowOnError extends boolean = false>(options?: Options<GetMetricsData, ThrowOnError>) => (options?.client ?? client).get<GetMetricsResponses, unknown, ThrowOnError>({ url: '/metrics', ...options });
+
+/**
+ * List in-memory repair runs.
+ */
+export const listRepairs = <ThrowOnError extends boolean = false>(options?: Options<ListRepairsData, ThrowOnError>) => (options?.client ?? client).get<ListRepairsResponses, unknown, ThrowOnError>({ url: '/v1/repairs', ...options });
+
+/**
+ * Diagnose a repository and create an approval-gated repair run.
+ */
+export const createRepair = <ThrowOnError extends boolean = false>(options: Options<CreateRepairData, ThrowOnError>) => (options.client ?? client).post<CreateRepairResponses, CreateRepairErrors, ThrowOnError>({
+    url: '/v1/repairs',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Read one repair run.
+ */
+export const getRepair = <ThrowOnError extends boolean = false>(options: Options<GetRepairData, ThrowOnError>) => (options.client ?? client).get<GetRepairResponses, GetRepairErrors, ThrowOnError>({ url: '/v1/repairs/{repairId}', ...options });
+
+/**
+ * Approve or reject an awaiting repair proposal.
+ */
+export const decideRepairApproval = <ThrowOnError extends boolean = false>(options: Options<DecideRepairApprovalData, ThrowOnError>) => (options.client ?? client).post<DecideRepairApprovalResponses, DecideRepairApprovalErrors, ThrowOnError>({
+    url: '/v1/repairs/{repairId}/approval',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});

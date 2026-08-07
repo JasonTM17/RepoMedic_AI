@@ -18,7 +18,7 @@ export interface CoordinatorResult {
   issues: DiagnosisIssue[];
   proposal: PatchProposal | null; // null if no issues found
   explorerIterations: number;
-  stopped: string;
+  stopped: "max-iterations" | "done" | "error";
 }
 
 /**
