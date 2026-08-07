@@ -1,9 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { realpathSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, isAbsolute, join, normalize, resolve, sep } from "node:path";
 
 import {
+  approvalSchema,
   createModelAdapter,
+  diagnosisIssueSchema,
+  patchProposalSchema,
+  repositoryTargetSchema,
   runBoundedRetry,
   runCoordinator,
   type Approval,
@@ -72,6 +85,175 @@ export interface RepairRun {
   error?: string;
 }
 
+const boundedRetryResultSchema = z
+  .object({
+    success: z.boolean(),
+    attempts: z.number().int().nonnegative(),
+    finalStatus: z.enum([
+      "applied",
+      "no-op",
+      "failed",
+      "reverted",
+      "revert-failed",
+    ]),
+    summary: z.string(),
+  })
+  .strict();
+
+const repairRunSchema = z
+  .object({
+    id: z.string().min(1),
+    status: z.enum([
+      "diagnosing",
+      "awaiting-approval",
+      "running",
+      "completed",
+      "rejected",
+      "failed",
+    ]),
+    createdAt: z.string().min(1),
+    updatedAt: z.string().min(1),
+    request: z
+      .object({
+        issueDescription: z.string().min(1),
+        rootPath: z.string().min(1),
+        allowlist: z.array(z.string()),
+        backend: z.enum(["fake", "openai"]),
+        maxRetries: z.number().int().positive(),
+        dryRun: z.boolean(),
+      })
+      .strict(),
+    target: repositoryTargetSchema,
+    issues: z.array(diagnosisIssueSchema),
+    proposal: patchProposalSchema.nullable(),
+    approval: approvalSchema.nullable(),
+    result: boundedRetryResultSchema.nullable(),
+    explorerIterations: z.number().int().nonnegative(),
+    stopped: z.enum(["max-iterations", "done", "error"]),
+    error: z.string().optional(),
+  })
+  .strict();
+
+const persistedRepairStateSchema = z
+  .object({
+    version: z.literal(1),
+    repositoryRoot: z.string().min(1),
+    runs: z.array(repairRunSchema),
+  })
+  .strict();
+
+export interface RepairRunStore {
+  load(): RepairRun[];
+  save(runs: readonly RepairRun[]): void;
+}
+
+export class MemoryRepairRunStore implements RepairRunStore {
+  private runs: RepairRun[] = [];
+
+  load(): RepairRun[] {
+    return structuredClone(this.runs);
+  }
+
+  save(runs: readonly RepairRun[]): void {
+    this.runs = structuredClone([...runs]);
+  }
+}
+
+export interface FileRepairRunStoreOptions {
+  dataDir: string;
+  repositoryRoot: string;
+}
+
+/**
+ * Durable local store for repair evidence. Writes use a temporary file and a
+ * same-directory rename so a process interruption cannot leave a half JSON
+ * document as the active state.
+ */
+export class FileRepairRunStore implements RepairRunStore {
+  readonly dataDir: string;
+  readonly filePath: string;
+  private readonly repositoryRoot: string;
+
+  constructor(options: FileRepairRunStoreOptions) {
+    this.dataDir = resolve(options.dataDir);
+    this.filePath = join(this.dataDir, "repair-runs.v1.json");
+    this.repositoryRoot = options.repositoryRoot;
+    mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
+  }
+
+  load(): RepairRun[] {
+    if (!existsSync(this.filePath)) return [];
+
+    let raw: string;
+    try {
+      raw = readFileSync(this.filePath, "utf8");
+    } catch (error) {
+      throw new Error(
+        `Unable to read the repair store: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw) as unknown;
+    } catch {
+      throw new Error(
+        `Repair store ${this.filePath} is not valid JSON; move it aside before restarting.`,
+      );
+    }
+
+    const state = persistedRepairStateSchema.safeParse(parsed);
+    if (!state.success) {
+      throw new Error(
+        `Repair store ${this.filePath} failed schema validation; move it aside before restarting.`,
+      );
+    }
+    if (resolve(state.data.repositoryRoot) !== resolve(this.repositoryRoot)) {
+      throw new Error(
+        `Repair store ${this.filePath} belongs to a different repository root.`,
+      );
+    }
+
+    return state.data.runs.map((run) => {
+      const { error, ...withoutError } = run;
+      return error === undefined ? withoutError : { ...withoutError, error };
+    });
+  }
+
+  save(runs: readonly RepairRun[]): void {
+    const temporaryPath = join(
+      this.dataDir,
+      `.repair-runs.${process.pid}.${randomUUID()}.tmp`,
+    );
+    const state = JSON.stringify(
+      {
+        version: 1,
+        repositoryRoot: this.repositoryRoot,
+        runs,
+      },
+      null,
+      2,
+    );
+
+    try {
+      writeFileSync(temporaryPath, `${state}\n`, {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      renameSync(temporaryPath, this.filePath);
+    } catch (error) {
+      try {
+        unlinkSync(temporaryPath);
+      } catch {
+        // Preserve the original persistence error.
+      }
+      throw new Error(
+        `Unable to persist the repair store: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+}
+
 export class RepairServiceError extends Error {
   readonly statusCode: number;
   readonly code: string;
@@ -99,6 +281,8 @@ export interface RepairServiceOptions {
   checksToRun?: CheckCommand[];
   maxExplorerIterations?: number;
   maxStoredRuns?: number;
+  store?: RepairRunStore;
+  dataDir?: string;
 }
 
 const DEFAULT_MAX_STORED_RUNS = 100;
@@ -225,12 +409,33 @@ function cloneRun(run: RepairRun): RepairRun {
   return structuredClone(run);
 }
 
+function recoverInterruptedRun(run: RepairRun): RepairRun {
+  if (run.status !== "diagnosing" && run.status !== "running") {
+    return run;
+  }
+
+  return {
+    ...run,
+    status: "failed",
+    updatedAt: now(),
+    error:
+      "Repair run interrupted because the API restarted before completion.",
+    result: {
+      success: false,
+      attempts: 0,
+      finalStatus: "failed",
+      summary: "The API restarted while this repair run was in progress.",
+    },
+  };
+}
+
 export class RepairService {
   readonly repositoryRoot: string;
   private readonly modelFactory: ModelFactory;
   private readonly checksToRun: CheckCommand[] | undefined;
   private readonly maxExplorerIterations: number;
   private readonly maxStoredRuns: number;
+  private readonly store: RepairRunStore;
   private readonly runs = new Map<string, RepairRun>();
 
   constructor(options: RepairServiceOptions) {
@@ -252,6 +457,33 @@ export class RepairService {
     }
     if (!Number.isSafeInteger(this.maxStoredRuns) || this.maxStoredRuns < 1) {
       throw new Error("maxStoredRuns must be a positive safe integer");
+    }
+
+    this.store =
+      options.store ??
+      new FileRepairRunStore({
+        dataDir: options.dataDir
+          ? isAbsolute(options.dataDir)
+            ? options.dataDir
+            : join(this.repositoryRoot, options.dataDir)
+          : join(this.repositoryRoot, ".repomedic"),
+        repositoryRoot: this.repositoryRoot,
+      });
+
+    const loadedRuns = this.store.load();
+    const recoveredRuns = loadedRuns.map(recoverInterruptedRun);
+    for (const run of recoveredRuns) this.runs.set(run.id, run);
+    this.trimRuns();
+    if (
+      recoveredRuns.length !== this.runs.size ||
+      recoveredRuns.some(
+        (run, index) =>
+          run.status !== loadedRuns[index]?.status ||
+          run.updatedAt !== loadedRuns[index]?.updatedAt ||
+          run.error !== loadedRuns[index]?.error,
+      )
+    ) {
+      this.persist();
     }
   }
 
@@ -324,7 +556,9 @@ export class RepairService {
       });
 
       run.issues = coordinatorResult.issues;
-      run.proposal = coordinatorResult.proposal;
+      run.proposal = coordinatorResult.proposal?.operations.length
+        ? coordinatorResult.proposal
+        : null;
       run.explorerIterations = coordinatorResult.explorerIterations;
       run.stopped = coordinatorResult.stopped;
 
@@ -339,7 +573,7 @@ export class RepairService {
               ? "Diagnosis completed without actionable issues."
               : "Diagnosis completed in dry-run mode; no patch was applied.",
         };
-      } else if (!coordinatorResult.proposal?.operations.length) {
+      } else if (!run.proposal) {
         run.status = "completed";
         run.result = {
           success: true,
@@ -431,10 +665,19 @@ export class RepairService {
 
   private remember(run: RepairRun): void {
     this.runs.set(run.id, run);
+    this.trimRuns();
+    this.persist();
+  }
+
+  private trimRuns(): void {
     while (this.runs.size > this.maxStoredRuns) {
       const oldest = this.runs.keys().next().value;
       if (!oldest) break;
       this.runs.delete(oldest);
     }
+  }
+
+  private persist(): void {
+    this.store.save([...this.runs.values()]);
   }
 }

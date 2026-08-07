@@ -1,4 +1,6 @@
-import { dirname } from "node:path";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 
 import request from "supertest";
 import { describe, expect, it } from "vitest";
@@ -6,7 +8,11 @@ import { describe, expect, it } from "vitest";
 import { FakeModelAdapter } from "@jasonTM17/core";
 
 import { createApp } from "../src/app.js";
-import type { ModelFactory } from "../src/repair-service.js";
+import {
+  FileRepairRunStore,
+  type ModelFactory,
+  type RepairRun,
+} from "../src/repair-service.js";
 
 const diagnosisResponse =
   'DIAGNOSIS:[{"id":"issue-1","file":"README.md","severity":"low","confidence":0.9,"description":"The README needs a small correction.","evidence":["A failing documentation check identified the stale statement."],"relatedFiles":[]} ]';
@@ -15,23 +21,33 @@ function queuedModelFactory(responses: string[]): ModelFactory {
   return () => new FakeModelAdapter([responses.shift() ?? "DONE"]);
 }
 
+function createTestApp(
+  options: Parameters<typeof createApp>[0] = {},
+): ReturnType<typeof createApp> {
+  return createApp({
+    repositoryRoot: process.cwd(),
+    persistence: "memory",
+    ...options,
+  });
+}
+
 describe("RepoMedic API bootstrap", () => {
   it("exposes a liveness endpoint", async () => {
-    const response = await request(createApp()).get("/healthz");
+    const response = await request(createTestApp()).get("/healthz");
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: "ok" });
   });
 
   it("exposes a Prometheus-compatible metrics response", async () => {
-    const response = await request(createApp()).get("/metrics");
+    const response = await request(createTestApp()).get("/metrics");
 
     expect(response.status).toBe(200);
     expect(response.text).toContain("repomedic_api_info");
   });
 
   it("returns a bounded JSON response for malformed JSON", async () => {
-    const response = await request(createApp())
+    const response = await request(createTestApp())
       .post("/v1/repairs")
       .set("content-type", "application/json")
       .send("{");
@@ -44,8 +60,7 @@ describe("RepoMedic API bootstrap", () => {
   });
 
   it("creates, lists, retrieves, and rejects a repair run", async () => {
-    const app = createApp({
-      repositoryRoot: process.cwd(),
+    const app = createTestApp({
       modelFactory: queuedModelFactory([diagnosisResponse]),
       checksToRun: [],
     });
@@ -87,8 +102,7 @@ describe("RepoMedic API bootstrap", () => {
   });
 
   it("runs the approved workflow and records a bounded failure", async () => {
-    const app = createApp({
-      repositoryRoot: process.cwd(),
+    const app = createTestApp({
       modelFactory: queuedModelFactory([diagnosisResponse, "DONE"]),
       checksToRun: [],
     });
@@ -111,8 +125,7 @@ describe("RepoMedic API bootstrap", () => {
   });
 
   it("keeps fake no-issue runs deterministic and rejects unsafe roots", async () => {
-    const app = createApp({
-      repositoryRoot: process.cwd(),
+    const app = createTestApp({
       modelFactory: queuedModelFactory(["DONE"]),
     });
 
@@ -135,7 +148,7 @@ describe("RepoMedic API bootstrap", () => {
   });
 
   it("restricts browser origins to the configured local dashboard", async () => {
-    const app = createApp({ repositoryRoot: process.cwd() });
+    const app = createTestApp();
 
     const allowed = await request(app)
       .options("/v1/repairs")
@@ -150,5 +163,106 @@ describe("RepoMedic API bootstrap", () => {
       .set("Origin", "http://malicious.local");
     expect(denied.status).toBe(403);
     expect(denied.body.code).toBe("CORS_ORIGIN_DENIED");
+  });
+
+  it("supports opt-in bearer authentication without blocking healthchecks", async () => {
+    const app = createTestApp({ apiToken: "local-test-token" });
+
+    const health = await request(app).get("/healthz");
+    expect(health.status).toBe(200);
+
+    const unauthorized = await request(app).get("/v1/repairs");
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.body.code).toBe("UNAUTHORIZED");
+
+    const authorized = await request(app)
+      .get("/v1/repairs")
+      .set("Authorization", "Bearer local-test-token");
+    expect(authorized.status).toBe(200);
+  });
+
+  it("persists completed runs and makes them available after an API restart", async () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "repomedic-api-store-"));
+    const dataDir = join(temporaryRoot, "store");
+
+    try {
+      const firstApp = createApp({
+        repositoryRoot: process.cwd(),
+        dataDir,
+        modelFactory: queuedModelFactory(["DONE"]),
+      });
+      const created = await request(firstApp).post("/v1/repairs").send({
+        issueDescription: "Persist this completed run",
+        backend: "fake",
+      });
+
+      expect(created.status).toBe(201);
+      expect(
+        readFileSync(join(dataDir, "repair-runs.v1.json"), "utf8"),
+      ).toContain(created.body.id);
+
+      const restartedApp = createApp({
+        repositoryRoot: process.cwd(),
+        dataDir,
+      });
+      const restored = await request(restartedApp).get(
+        `/v1/repairs/${created.body.id}`,
+      );
+
+      expect(restored.status).toBe(200);
+      expect(restored.body.status).toBe("completed");
+      expect(restored.body.result.summary).toContain(
+        "without actionable issues",
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("marks an interrupted persisted run as failed instead of leaving it running", async () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "repomedic-api-recovery-"),
+    );
+    const dataDir = join(temporaryRoot, "store");
+    const run: RepairRun = {
+      id: "repair-interrupted",
+      status: "running",
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+      request: {
+        issueDescription: "Interrupted run",
+        rootPath: process.cwd(),
+        allowlist: ["."],
+        backend: "fake",
+        maxRetries: 3,
+        dryRun: false,
+      },
+      target: { rootPath: process.cwd() },
+      issues: [],
+      proposal: null,
+      approval: null,
+      result: null,
+      explorerIterations: 1,
+      stopped: "done",
+    };
+
+    try {
+      new FileRepairRunStore({
+        dataDir,
+        repositoryRoot: process.cwd(),
+      }).save([run]);
+
+      const app = createApp({ repositoryRoot: process.cwd(), dataDir });
+      const recovered = await request(app).get(
+        "/v1/repairs/repair-interrupted",
+      );
+
+      expect(recovered.status).toBe(200);
+      expect(recovered.body.status).toBe("failed");
+      expect(recovered.body.error).toContain("API restarted");
+      expect(recovered.body.result.finalStatus).toBe("failed");
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
   });
 });
