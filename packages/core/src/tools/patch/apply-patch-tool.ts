@@ -105,6 +105,19 @@ export async function applyPatchTool(
         // `--reject` is intentionally omitted: after the clean preflight,
         // git's default all-or-nothing apply behavior is the transaction
         // boundary. Unexpected failure is surfaced instead of guessed rollback.
+        if (proposal.digest !== undefined) {
+          try {
+            await verifyPatchPreconditions(
+              root,
+              allowlist,
+              proposal.operations,
+            );
+          } catch (error) {
+            return patchFail(
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+        }
         const result = await boundedExec(
           "git",
           ["apply", "--unidiff-zero", tempPath],

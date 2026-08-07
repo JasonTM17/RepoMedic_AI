@@ -53,7 +53,9 @@ describe("checkPathAllowlist", () => {
     const decision = checkPathAllowlist(
       ROOT,
       ["."],
-      ".repomedic/repair-runs.v1.json",
+      process.platform === "win32"
+        ? ".REPOMEDIC/repair-runs.v1.json"
+        : ".repomedic/repair-runs.v1.json",
     );
     expect(decision.allowed).toBe(false);
     expect(decision.violations[0]?.code).toBe("denied-path");
@@ -175,6 +177,14 @@ describe("isPathAllowed / isWithinRoot", () => {
     expect(isWithinRoot("/repo", "/repo/../outside")).toBe(false);
   });
 
+  it("matches root casing correctly on Windows", () => {
+    const result =
+      process.platform === "win32"
+        ? isWithinRoot("C:\\Repo", "c:\\REPO\\src\\app.ts")
+        : isWithinRoot("/repo", "/repo/src/app.ts");
+    expect(result).toBe(true);
+  });
+
   it("normalizes backslashes on both sides", () => {
     expect(isWithinRoot("C:\\repo", "C:\\repo\\src\\a.ts")).toBe(true);
     expect(isWithinRoot("C:\\repo", "C:\\other\\x")).toBe(false);
@@ -247,6 +257,23 @@ describe("evaluateMutationPolicy", () => {
     const decision = evaluateMutationPolicy(
       options,
       { id: "op-1", path: "src\\.git\\config", kind: "modify" },
+      true,
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.violations[0]?.code).toBe("denied-path");
+  });
+
+  it("blocks protected components regardless of Windows casing", () => {
+    const decision = evaluateMutationPolicy(
+      options,
+      {
+        id: "op-1",
+        path:
+          process.platform === "win32"
+            ? "src\\.GIT\\config"
+            : "src/.git/config",
+        kind: "modify",
+      },
       true,
     );
     expect(decision.allowed).toBe(false);

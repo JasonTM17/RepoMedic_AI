@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import os from "node:os";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -8,6 +9,7 @@ import {
   isWithinRoot,
   normalizePathForPolicy,
 } from "../../policy/path-allowlist.js";
+import { boundedExec } from "../../process/index.js";
 import { formatPatchOperations } from "./create-patch-tool.js";
 
 /** Sentinel used to record that a file was expected to be absent. */
@@ -127,4 +129,65 @@ export async function capturePatchPostconditions(
     captured.push({ ...operation, newSha });
   }
   return captured;
+}
+
+/**
+ * Calculate new-file hashes without mutating the user's worktree. The exact
+ * candidate is applied to a small isolated snapshot containing only its
+ * affected files, then the resulting bytes are hashed.
+ */
+export async function calculatePatchPostconditions(
+  root: string,
+  allowlist: readonly string[],
+  operations: readonly PatchOperation[],
+): Promise<PatchOperation[]> {
+  const snapshotRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), "repomedic-patch-preview-"),
+  );
+  try {
+    const resolvedSnapshotRoot = await fs.realpath(snapshotRoot);
+    for (const operation of operations) {
+      if (operation.kind === "create") continue;
+
+      const source = await resolveSafeTarget(root, operation);
+      const target = path.resolve(
+        snapshotRoot,
+        normalizePathForPolicy(operation.path),
+      );
+      if (!isWithinRoot(resolvedSnapshotRoot, target)) {
+        throw new Error(
+          `Patch snapshot path escapes repository root: ${operation.path}`,
+        );
+      }
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.copyFile(source, target);
+    }
+
+    const patchPath = path.join(
+      path.dirname(snapshotRoot),
+      `${path.basename(snapshotRoot)}.patch`,
+    );
+    await fs.writeFile(patchPath, formatPatchOperations(operations), "utf8");
+    const result = await boundedExec(
+      "git",
+      ["apply", "--unidiff-zero", patchPath],
+      { cwd: snapshotRoot, timeoutMs: 30_000 },
+    );
+    if (result.exitCode !== 0) {
+      throw new Error(
+        `Isolated patch simulation failed: ${result.stderr || result.stdout || "unknown patch failure"}`,
+      );
+    }
+
+    return capturePatchPostconditions(snapshotRoot, allowlist, operations);
+  } finally {
+    await fs.rm(
+      path.join(
+        path.dirname(snapshotRoot),
+        `${path.basename(snapshotRoot)}.patch`,
+      ),
+      { force: true },
+    );
+    await fs.rm(snapshotRoot, { recursive: true, force: true });
+  }
 }

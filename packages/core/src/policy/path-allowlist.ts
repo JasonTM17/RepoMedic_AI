@@ -23,6 +23,10 @@ export function normalizePathForPolicy(input: string): string {
   return normalized;
 }
 
+function policyComparable(input: string): string {
+  return process.platform === "win32" ? input.toLowerCase() : input;
+}
+
 export function isAbsoluteOrDriveOrUnc(path: string): boolean {
   if (path.startsWith("/")) return true;
   // Windows drive letter with or without slash: `C:/...`, `C:foo`
@@ -52,7 +56,8 @@ function hasUnsafeComponent(path: string): boolean {
 }
 
 function isDeniedComponent(component: string): boolean {
-  return component === ".git" || component === ".repomedic";
+  const comparable = policyComparable(component);
+  return comparable === ".git" || comparable === ".repomedic";
 }
 
 /**
@@ -62,8 +67,10 @@ function isDeniedComponent(component: string): boolean {
  * rejected rather than resolved further.
  */
 export function isWithinRoot(root: string, path: string): boolean {
-  const normalizedRoot = normalizePathForPolicy(root).replace(/\/+$/, "");
-  const normalizedPath = normalizePathForPolicy(path);
+  const normalizedRoot = policyComparable(
+    normalizePathForPolicy(root).replace(/\/+$/, ""),
+  );
+  const normalizedPath = policyComparable(normalizePathForPolicy(path));
   if (isTraversal(normalizedPath)) return false;
   return (
     normalizedPath === normalizedRoot ||
@@ -129,7 +136,10 @@ export function checkPathAllowlist(
     return deny(`denied component in path: ${path}`, "denied-path");
 
   const matchesAllowlist = allowlist.some((entry) => {
-    const normalizedEntry = normalizePathForPolicy(entry).replace(/\/+$/, "");
+    const normalizedEntry = policyComparable(
+      normalizePathForPolicy(entry).replace(/\/+$/, ""),
+    );
+    const comparablePath = policyComparable(normalized);
 
     // `.` is the documented CLI default and means the repository root. Keep
     // the explicit path checks above in force so this wildcard still cannot
@@ -137,8 +147,8 @@ export function checkPathAllowlist(
     if (normalizedEntry === ".") return true;
 
     return (
-      normalized === normalizedEntry ||
-      normalized.startsWith(`${normalizedEntry}/`)
+      comparablePath === normalizedEntry ||
+      comparablePath.startsWith(`${normalizedEntry}/`)
     );
   });
   if (!matchesAllowlist)

@@ -91,6 +91,9 @@ describe("RepoMedic API bootstrap", () => {
     expect(created.body.proposal.operations[0].oldSha).toMatch(
       /^[a-f0-9]{64}$/,
     );
+    expect(created.body.proposal.operations[0].newSha).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
     expect(created.body.proposal.operations[0].hunks).toHaveLength(1);
 
     const listed = await request(app).get("/v1/repairs");

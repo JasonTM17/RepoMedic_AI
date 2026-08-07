@@ -36,15 +36,21 @@ const SECRET_BASENAMES = [
 ];
 
 function isSecretBasename(basename: string): boolean {
-  if (SECRET_BASENAMES.includes(basename)) return true;
-  if (basename.startsWith(".env")) return true;
-  return /\.(pem|key)$/i.test(basename);
+  const comparable =
+    process.platform === "win32" ? basename.toLowerCase() : basename;
+  if (SECRET_BASENAMES.includes(comparable)) return true;
+  if (comparable.startsWith(".env")) return true;
+  return /\.(pem|key)$/.test(comparable);
 }
 
 function isDeniedPath(normalizedPath: string): boolean {
-  if (DENIED_SUBSTRINGS.some((token) => normalizedPath.includes(token)))
+  const comparable =
+    process.platform === "win32"
+      ? normalizedPath.toLowerCase()
+      : normalizedPath;
+  if (DENIED_SUBSTRINGS.some((token) => comparable.includes(token)))
     return true;
-  const basename = normalizedPath.split("/").pop() ?? normalizedPath;
+  const basename = comparable.split("/").pop() ?? comparable;
   return isSecretBasename(basename);
 }
 

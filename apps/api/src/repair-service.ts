@@ -194,10 +194,14 @@ export class FileRepairRunStore implements RepairRunStore {
       resolve(options.repositoryRoot),
       this.dataDir,
     ).replace(/\\/g, "/");
+    const comparableRelativeDataDir =
+      process.platform === "win32"
+        ? relativeDataDir.toLowerCase()
+        : relativeDataDir;
     if (
       isPathWithin(resolve(options.repositoryRoot), this.dataDir) &&
-      relativeDataDir !== ".repomedic" &&
-      !relativeDataDir.startsWith(".repomedic/")
+      comparableRelativeDataDir !== ".repomedic" &&
+      !comparableRelativeDataDir.startsWith(".repomedic/")
     ) {
       throw new Error(
         "Repair store dataDir inside the repository must be under .repomedic so agents cannot read its state.",
@@ -405,8 +409,10 @@ export function discoverRepositoryRoot(start = process.cwd()): string {
 }
 
 function isPathWithin(parent: string, child: string): boolean {
-  const normalizedParent = normalize(parent).replace(/[\\/]$/, "");
-  const normalizedChild = normalize(child);
+  const comparable = (value: string) =>
+    process.platform === "win32" ? value.toLowerCase() : value;
+  const normalizedParent = comparable(normalize(parent).replace(/[\\/]$/, ""));
+  const normalizedChild = comparable(normalize(child));
   return (
     normalizedChild === normalizedParent ||
     normalizedChild.startsWith(`${normalizedParent}${sep}`)

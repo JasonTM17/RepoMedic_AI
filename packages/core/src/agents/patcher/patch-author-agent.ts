@@ -8,6 +8,7 @@ import { applyPatchTool } from "../../tools/patch/apply-patch-tool.js";
 import { createPatchFromDiff } from "../../tools/patch/create-patch-tool.js";
 import {
   calculatePatchDigest,
+  calculatePatchPostconditions,
   capturePatchPostconditions,
   capturePatchPreconditions,
 } from "../../tools/patch/patch-integrity.js";
@@ -257,11 +258,27 @@ export async function runPatchAuthorAgent(
           };
         }
 
+        let postconditionedOperations: PatchOperation[];
+        try {
+          postconditionedOperations = await calculatePatchPostconditions(
+            previewRoot,
+            allowlist,
+            preparedOperations,
+          );
+        } catch (error) {
+          return {
+            success: false,
+            appliedOperations: [],
+            error: error instanceof Error ? error.message : String(error),
+            iterations,
+          };
+        }
+
         const preparedProposal: PatchProposal = {
           ...updatedProposal,
-          operations: preparedOperations,
+          operations: postconditionedOperations,
           status: "ready",
-          digest: calculatePatchDigest(preparedOperations),
+          digest: calculatePatchDigest(postconditionedOperations),
         };
         const validation = await applyPatchTool({
           root: previewRoot,
