@@ -61,6 +61,11 @@ npm test
 docker compose up --build
 ```
 
+Compose binds the current checkout to the API at `/workspace/repository`,
+persists run evidence in `.repomedic/`, and publishes both services only on
+loopback. Run it only against a repository you intend to give the guarded
+workflow access to; file mutations still require human approval.
+
 Registry publication and deployment are separate release activities; this
 repository does not claim that the example images are currently published.
 
@@ -88,10 +93,10 @@ npm run dev:api
 
 The API exposes `/healthz`, `/readyz`, `/metrics`, and the repair lifecycle at
 `/v1/repairs`. The dashboard connects through the generated
-`@jasonTM17/api-client` package. By default, runs are local and in-memory; an
-API restart clears them. Select the `openai` backend only after configuring
-`OPENAI_API_KEY`; the `fake` backend is deterministic and useful for local UI
-verification.
+`@jasonTM17/api-client` package. By default, runs are local and persist under
+`.repomedic/`; interrupted runs are recovered as failed with an explicit reason.
+Select the `openai` backend only after configuring `OPENAI_API_KEY`; the `fake`
+backend is deterministic and useful for local UI verification.
 
 ## Architecture
 

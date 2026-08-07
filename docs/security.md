@@ -63,3 +63,13 @@ Key behaviors:
 Automatic retry applies only exact unified-diff operations with hunks. Review
 failure is reverted with `git apply --reverse` using those exact operations;
 path-only rollback is rejected so unrelated dirty files are not restored over.
+
+### API boundary
+
+The API defaults to loopback binding for local development. Compose publishes
+the services only on loopback and mounts the selected repository explicitly. For
+trusted local clients that need an additional boundary, setting
+`REPOMEDIC_API_TOKEN` enables constant-time checked `Authorization: Bearer`
+authentication for `/v1/*`; health, readiness, and metrics remain available for
+healthchecks. The token is optional by design for the single-user local default,
+not a claim of multi-tenant isolation.
