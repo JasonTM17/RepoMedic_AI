@@ -7,6 +7,7 @@ import {
   realpathSync,
   readdirSync,
   rmSync,
+  utimesSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -329,6 +330,69 @@ describe("RepoMedic API bootstrap", () => {
         closeSync(lockDescriptor);
         unlinkSync(join(dataDir, "repair-runs.v1.lock"));
       }
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("recovers stale locks but never removes an active process lock", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "repomedic-api-stale-"));
+    const dataDir = join(temporaryRoot, "store");
+    const store = new FileRepairRunStore({
+      dataDir,
+      repositoryRoot: process.cwd(),
+    });
+    const staleTime = new Date(Date.now() - 10 * 60 * 1_000);
+
+    try {
+      store.load();
+      writeFileSync(
+        store.lockPath,
+        JSON.stringify({ pid: process.pid }),
+        "utf8",
+      );
+      utimesSync(store.lockPath, staleTime, staleTime);
+      expect(() => store.save([persistedRun("active-lock")])).toThrow(
+        "locked by another process",
+      );
+      unlinkSync(store.lockPath);
+
+      writeFileSync(
+        store.lockPath,
+        JSON.stringify({ pid: process.pid + 1_000_000 }),
+        "utf8",
+      );
+      utimesSync(store.lockPath, staleTime, staleTime);
+      expect(() => store.save([persistedRun("stale-lock")])).not.toThrow();
+      expect(existsSync(store.lockPath)).toBe(false);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("quarantines state that becomes corrupt before a write", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "repomedic-api-corrupt-write-"),
+    );
+    const dataDir = join(temporaryRoot, "store");
+    const store = new FileRepairRunStore({
+      dataDir,
+      repositoryRoot: process.cwd(),
+    });
+
+    try {
+      const run = persistedRun("repair-corrupt-write");
+      store.save([run]);
+      store.load();
+      writeFileSync(store.filePath, "{not-json", "utf8");
+
+      expect(() => store.save([run])).toThrow("recovery is required");
+      expect(store.getRecoveryWarning()).toContain("quarantined");
+      expect(
+        readdirSync(dataDir).some((name) =>
+          name.startsWith("repair-runs.v1.corrupt."),
+        ),
+      ).toBe(true);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
