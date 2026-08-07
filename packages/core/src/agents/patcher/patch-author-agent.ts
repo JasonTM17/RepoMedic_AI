@@ -12,6 +12,7 @@ export interface PatchAuthorOptions {
   proposal: PatchProposal;
   issues: DiagnosisIssue[];
   approved: boolean;
+  allowlist: readonly string[];
   /** Failed check results from previous attempt, used as feedback */
   previousFailures?: string;
   maxIterations?: number; // default 5
@@ -22,6 +23,42 @@ export interface PatchAuthorResult {
   appliedOperations: PatchOperation[];
   error?: string;
   iterations: number;
+}
+
+function operationKey(
+  operation: Pick<PatchOperation, "kind" | "path">,
+): string {
+  return `${operation.kind}\u0000${operation.path}`;
+}
+
+/**
+ * Model output is authorized as a bounded multiset of operation identities.
+ * A path-only filter would allow an approved file to change operation kind or
+ * to appear more times than the proposal permits.
+ */
+function hasExactApprovedOperations(
+  parsedOperations: readonly PatchOperation[],
+  approvedOperations: readonly PatchOperation[],
+): boolean {
+  if (parsedOperations.length !== approvedOperations.length) return false;
+
+  const approvedCounts = new Map<string, number>();
+  for (const operation of approvedOperations) {
+    const key = operationKey(operation);
+    approvedCounts.set(key, (approvedCounts.get(key) ?? 0) + 1);
+  }
+
+  const parsedCounts = new Map<string, number>();
+  for (const operation of parsedOperations) {
+    const key = operationKey(operation);
+    const nextCount = (parsedCounts.get(key) ?? 0) + 1;
+    parsedCounts.set(key, nextCount);
+    if (nextCount > (approvedCounts.get(key) ?? 0)) return false;
+  }
+
+  return [...approvedCounts].every(
+    ([key, count]) => parsedCounts.get(key) === count,
+  );
 }
 
 /**
@@ -42,6 +79,7 @@ export async function runPatchAuthorAgent(
     proposal,
     issues,
     approved,
+    allowlist,
     previousFailures,
     maxIterations = 5,
   } = options;
@@ -51,6 +89,19 @@ export async function runPatchAuthorAgent(
       success: false,
       appliedOperations: [],
       error: "Patch not approved",
+      iterations: 0,
+    };
+  }
+
+  const unsupportedOperations = proposal.operations.filter(
+    (operation) => operation.kind === "rename" || operation.kind === "chmod",
+  );
+  if (unsupportedOperations.length > 0) {
+    return {
+      success: false,
+      appliedOperations: [],
+      error:
+        "Automatic patch authoring supports only create, modify, and delete unified-diff operations.",
       iterations: 0,
     };
   }
@@ -110,32 +161,36 @@ export async function runPatchAuthorAgent(
         continue;
       }
 
-      // Only apply ops that are in the proposal's allowlist
-      const allowedPaths = new Set(proposal.operations.map((op) => op.path));
-      const filteredOps = parsed.operations.filter((op) =>
-        allowedPaths.has(op.path),
-      );
+      if (!hasExactApprovedOperations(parsed.operations, proposal.operations)) {
+        messages.push({
+          role: "user",
+          content:
+            "The patch was rejected because every operation must match an approved proposal path and operation kind, without duplicates. Try again with only the exact approved operations.",
+        });
+        continue;
+      }
 
       const updatedProposal: PatchProposal = {
         ...proposal,
-        operations: filteredOps,
+        operations: parsed.operations,
       };
       const result = await applyPatchTool({
         root: proposal.target.rootPath,
-        allowlist: ["."],
+        allowlist,
         proposal: updatedProposal,
         approved,
       });
 
       if (!result.success) {
-        messages.push({
-          role: "user",
-          content: `Apply failed: ${result.error}. Fix the patch and try again.`,
-        });
-        continue;
+        return {
+          success: false,
+          appliedOperations,
+          error: `Apply failed; patch authoring stopped to avoid retrying over an unknown worktree state: ${result.error}`,
+          iterations,
+        };
       }
 
-      appliedOperations.push(...filteredOps);
+      appliedOperations.push(...parsed.operations);
       return { success: true, appliedOperations, iterations };
     }
 

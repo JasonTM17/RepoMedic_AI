@@ -1,6 +1,32 @@
 import type { PatchOperation } from "../../domain/entities.js";
 import { patchOk, patchFail, type PatchToolResult } from "./patch-result.js";
 
+/** Rebuild the file headers required by git from a parsed patch operation. */
+export function formatPatchOperation(operation: PatchOperation): string | null {
+  if (operation.kind === "rename" || operation.kind === "chmod") return null;
+
+  const hunks = operation.hunks ?? [];
+  if (hunks.length === 0) return null;
+
+  const oldPath =
+    operation.kind === "create" ? "/dev/null" : `a/${operation.path}`;
+  const newPath =
+    operation.kind === "delete" ? "/dev/null" : `b/${operation.path}`;
+
+  return [`--- ${oldPath}`, `+++ ${newPath}`, ...hunks].join("\n");
+}
+
+/** Build one unified diff containing only operations with diff hunks. */
+export function formatPatchOperations(
+  operations: readonly PatchOperation[],
+): string {
+  const patches = operations
+    .map(formatPatchOperation)
+    .filter((patch): patch is string => patch !== null);
+
+  return patches.length > 0 ? `${patches.join("\n")}\n` : "";
+}
+
 export interface CreatePatchInput {
   /** Unified diff text (from git diff) */
   diffText: string;
@@ -43,7 +69,12 @@ export function createPatchFromDiff(
         currentNewPath === "/dev/null"
       ) {
         const path = currentOldPath.replace(/^a\//, "");
-        ops.push({ id: `op-${ops.length}`, path, kind: "delete", hunks: [] });
+        ops.push({
+          id: `op-${ops.length}`,
+          path,
+          kind: "delete",
+          hunks: currentHunks,
+        });
       }
     };
 

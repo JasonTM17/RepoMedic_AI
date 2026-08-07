@@ -36,6 +36,19 @@ describe("checkPathAllowlist", () => {
     expect(checkPathAllowlist(ROOT, ALLOWLIST, "src").allowed).toBe(true);
   });
 
+  it("treats the repository-root entry as a recursive allowlist", () => {
+    expect(checkPathAllowlist(ROOT, ["."], "src/app.ts").allowed).toBe(true);
+    expect(
+      checkPathAllowlist(ROOT, ["."], "packages/core/index.ts").allowed,
+    ).toBe(true);
+  });
+
+  it("does not let the repository-root entry bypass denied components", () => {
+    const decision = checkPathAllowlist(ROOT, ["."], ".git/config");
+    expect(decision.allowed).toBe(false);
+    expect(decision.violations[0]?.code).toBe("denied-path");
+  });
+
   it("rejects an empty path", () => {
     const decision = checkPathAllowlist(ROOT, ALLOWLIST, "");
     expect(decision.allowed).toBe(false);

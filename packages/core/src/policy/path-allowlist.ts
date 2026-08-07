@@ -128,11 +128,19 @@ export function checkPathAllowlist(
   if (normalized.split("/").some(isDeniedComponent))
     return deny(`denied component in path: ${path}`, "denied-path");
 
-  const matchesAllowlist = allowlist.some(
-    (entry) =>
-      normalized === entry ||
-      normalized.startsWith(`${entry.replace(/\/+$/, "")}/`),
-  );
+  const matchesAllowlist = allowlist.some((entry) => {
+    const normalizedEntry = normalizePathForPolicy(entry).replace(/\/+$/, "");
+
+    // `.` is the documented CLI default and means the repository root. Keep
+    // the explicit path checks above in force so this wildcard still cannot
+    // authorize traversal, absolute paths, or denied components.
+    if (normalizedEntry === ".") return true;
+
+    return (
+      normalized === normalizedEntry ||
+      normalized.startsWith(`${normalizedEntry}/`)
+    );
+  });
   if (!matchesAllowlist)
     return deny(`path is not allowlisted: ${path}`, "not-allowlisted");
 

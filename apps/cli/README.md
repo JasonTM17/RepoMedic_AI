@@ -2,7 +2,10 @@
 
 ## Purpose
 
-The CLI provides a scriptable local interface for the same guarded repair workflow used by the API. It will not bypass approval, patch, or command policy.
+The CLI provides the scriptable local interface for RepoMedic's guarded repair
+workflow. The API currently exposes health/readiness scaffolding and does not
+yet expose this repair flow. The CLI will not bypass approval, patch, or
+command policy.
 
 ## API surface
 
@@ -10,11 +13,12 @@ The CLI provides a scriptable local interface for the same guarded repair workfl
 - `repomedic triage <repo-path>` — runs the explorer, requests human approval
   for the resulting patch proposal, then applies it through the bounded
   retry pipeline (`packages/core` patch author + reviewer agents). Exits
-  non-zero if the patch pipeline reports `failed` or `reverted`; exits `0` on
-  `applied`, on no issues found, on approval rejection, and in `--dry-run`.
+  non-zero if the patch pipeline reports `failed`, `reverted`, or
+  `revert-failed`; exits `0` on `applied`, on an intentional empty-proposal
+  `no-op`, on no issues found, on approval rejection, and in `--dry-run`.
   - `--dry-run` — plan only; never invokes the patch pipeline.
   - `--model <backend>` — `fake` (default) or `openai`.
-  - `--allowlist <paths>` — comma-separated path allowlist relative to the repo root.
+  - `--allowlist <paths>` — comma-separated path allowlist relative to the repo root. The default `.` covers the repository except traversal and protected paths.
   - `--max-retries <n>` — positive integer; forwarded to the bounded retry
     pipeline as the attempt cap (default `3`).
   - `--issue <description>` — issue description passed to the explorer.

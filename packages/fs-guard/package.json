@@ -1,7 +1,7 @@
 {
   "name": "@jasonTM17/fs-guard",
   "version": "0.1.0",
-  "description": "Secure filesystem access with realpath confinement and TOCTOU guards for RepoMedic",
+  "description": "Secure filesystem access with realpath confinement and policy callbacks for RepoMedic",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

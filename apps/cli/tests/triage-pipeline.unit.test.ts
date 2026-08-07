@@ -137,6 +137,58 @@ describe("CLI triage patch pipeline wiring", () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it("surfaces revert failure and exits non-zero", async () => {
+    mocks.runCoordinator.mockResolvedValue(buildCoordinatorResult());
+    mocks.requestApproval.mockResolvedValue(approval("approved"));
+    mocks.runBoundedRetry.mockResolvedValue({
+      success: false,
+      attempts: 1,
+      finalStatus: "revert-failed",
+      summary: "Review failed and revert failed.",
+    } satisfies BoundedRetryResult);
+
+    const stderr = captureStream(process.stderr);
+    try {
+      await createProgram().parseAsync([
+        "node",
+        "repomedic",
+        "triage",
+        REPO_ROOT,
+      ]);
+    } finally {
+      stderr.restore();
+    }
+
+    expect(stderr.text()).toContain("Patch revert-failed after 1 attempt(s)");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("reports a successful no-op without setting a failure exit code", async () => {
+    mocks.runCoordinator.mockResolvedValue(buildCoordinatorResult());
+    mocks.requestApproval.mockResolvedValue(approval("approved"));
+    mocks.runBoundedRetry.mockResolvedValue({
+      success: true,
+      attempts: 1,
+      finalStatus: "no-op",
+      summary: "Patch author completed without applying operations.",
+    } satisfies BoundedRetryResult);
+
+    const stdout = captureStream(process.stdout);
+    try {
+      await createProgram().parseAsync([
+        "node",
+        "repomedic",
+        "triage",
+        REPO_ROOT,
+      ]);
+    } finally {
+      stdout.restore();
+    }
+
+    expect(stdout.text()).toContain("No patch operations were applied");
+    expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
+  });
+
   it("never calls the patch pipeline in dry-run mode", async () => {
     mocks.runCoordinator.mockResolvedValue(buildCoordinatorResult());
 
