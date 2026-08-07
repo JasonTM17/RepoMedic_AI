@@ -142,6 +142,15 @@ export type GetReadinessData = {
     url: '/readyz';
 };
 
+export type GetReadinessErrors = {
+    /**
+     * Repair persistence requires operator recovery before mutation.
+     */
+    503: ErrorResponse;
+};
+
+export type GetReadinessError = GetReadinessErrors[keyof GetReadinessErrors];
+
 export type GetReadinessResponses = {
     /**
      * Service is ready.
@@ -220,6 +229,10 @@ export type CreateRepairErrors = {
      * The API could not complete the request.
      */
     500: ErrorResponse;
+    /**
+     * Repair persistence requires operator recovery before mutation.
+     */
+    503: ErrorResponse;
 };
 
 export type CreateRepairError = CreateRepairErrors[keyof CreateRepairErrors];
@@ -298,6 +311,10 @@ export type DecideRepairApprovalErrors = {
      * The API could not complete the request.
      */
     500: ErrorResponse;
+    /**
+     * Repair persistence requires operator recovery before mutation.
+     */
+    503: ErrorResponse;
 };
 
 export type DecideRepairApprovalError = DecideRepairApprovalErrors[keyof DecideRepairApprovalErrors];

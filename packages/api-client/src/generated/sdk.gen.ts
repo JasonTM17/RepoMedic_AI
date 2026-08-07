@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateRepairData, CreateRepairErrors, CreateRepairResponses, DecideRepairApprovalData, DecideRepairApprovalErrors, DecideRepairApprovalResponses, GetHealthData, GetHealthResponses, GetMetricsData, GetMetricsResponses, GetReadinessData, GetReadinessResponses, GetRepairData, GetRepairErrors, GetRepairResponses, ListRepairsData, ListRepairsErrors, ListRepairsResponses } from './types.gen';
+import type { CreateRepairData, CreateRepairErrors, CreateRepairResponses, DecideRepairApprovalData, DecideRepairApprovalErrors, DecideRepairApprovalResponses, GetHealthData, GetHealthResponses, GetMetricsData, GetMetricsResponses, GetReadinessData, GetReadinessErrors, GetReadinessResponses, GetRepairData, GetRepairErrors, GetRepairResponses, ListRepairsData, ListRepairsErrors, ListRepairsResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -20,7 +20,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 
 export const getHealth = <ThrowOnError extends boolean = false>(options?: Options<GetHealthData, ThrowOnError>) => (options?.client ?? client).get<GetHealthResponses, unknown, ThrowOnError>({ url: '/healthz', ...options });
 
-export const getReadiness = <ThrowOnError extends boolean = false>(options?: Options<GetReadinessData, ThrowOnError>) => (options?.client ?? client).get<GetReadinessResponses, unknown, ThrowOnError>({ url: '/readyz', ...options });
+export const getReadiness = <ThrowOnError extends boolean = false>(options?: Options<GetReadinessData, ThrowOnError>) => (options?.client ?? client).get<GetReadinessResponses, GetReadinessErrors, ThrowOnError>({ url: '/readyz', ...options });
 
 export const getMetrics = <ThrowOnError extends boolean = false>(options?: Options<GetMetricsData, ThrowOnError>) => (options?.client ?? client).get<GetMetricsResponses, unknown, ThrowOnError>({ url: '/metrics', ...options });
 

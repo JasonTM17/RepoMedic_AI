@@ -58,7 +58,11 @@ Use `/healthz` for liveness and `/readyz` for readiness. Repair evidence is
 stored atomically in `repair-runs.v1.json` under `REPOMEDIC_DATA_DIR`; runs that
 were `diagnosing` or `running` during a restart are recovered as
 `recovery-required`, which blocks automatic continuation or mutation until an
-operator inspects the worktree. Authentication and a multi-user deployment
-boundary remain outside this local-first workflow. Set `REPOMEDIC_API_TOKEN`
-when the API is reachable by another trusted process; health and readiness
-endpoints remain public for container healthchecks.
+operator inspects the worktree. The store uses an exclusive lock and merges
+independent process snapshots; a stale lock can be recovered safely. Invalid
+state is quarantined instead of overwritten, `/readyz` returns `503`, and
+mutations remain blocked until the operator inspects the quarantine file.
+Authentication and a multi-user deployment boundary remain outside this
+local-first workflow. Set `REPOMEDIC_API_TOKEN` when the API is reachable by
+another trusted process; health and readiness endpoints remain public for
+container healthchecks.
