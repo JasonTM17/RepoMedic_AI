@@ -14,6 +14,9 @@
     "packages/*",
     "fixtures/*"
   ],
+  "overrides": {
+    "@hey-api/json-schema-ref-parser": "1.4.1"
+  },
   "scripts": {
     "build": "npm run build:core && npm run build:fs-guard && npm run build:exec-guard && npm run build:api-client && npm run build:api && npm run build:cli && npm run build:web",
     "build:api": "npm run build --workspace=@jasonTM17/api",
@@ -45,6 +48,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",
+    "@hey-api/openapi-ts": "0.97.3",
     "@types/express": "^5.0.3",
     "@types/node": "^22.15.34",
     "@types/react": "^19.1.8",
