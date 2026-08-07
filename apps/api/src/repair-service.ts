@@ -215,7 +215,7 @@ export class FileRepairRunStore implements RepairRunStore {
     }
     this.filePath = join(this.dataDir, "repair-runs.v1.json");
     this.lockPath = join(this.dataDir, "repair-runs.v1.lock");
-    this.repositoryRoot = options.repositoryRoot;
+    this.repositoryRoot = resolve(options.repositoryRoot);
     mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
   }
 
@@ -333,7 +333,7 @@ export class FileRepairRunStore implements RepairRunStore {
         `Repair store ${this.filePath} failed schema validation.`,
       );
     }
-    if (resolve(state.data.repositoryRoot) !== resolve(this.repositoryRoot)) {
+    if (!samePath(state.data.repositoryRoot, this.repositoryRoot)) {
       throw new Error(
         `Repair store ${this.filePath} belongs to a different repository root.`,
       );
@@ -505,6 +505,12 @@ function syncDirectory(directory: string): void {
   } finally {
     if (descriptor !== undefined) closeSync(descriptor);
   }
+}
+
+function samePath(left: string, right: string): boolean {
+  const comparable = (value: string) =>
+    process.platform === "win32" ? value.toLowerCase() : value;
+  return comparable(resolve(left)) === comparable(resolve(right));
 }
 
 export class RepairServiceError extends Error {
@@ -785,7 +791,7 @@ export class RepairService {
       : this.repositoryRoot;
     if (
       !isPathWithin(this.repositoryRoot, rootPath) ||
-      rootPath !== this.repositoryRoot
+      !samePath(rootPath, this.repositoryRoot)
     ) {
       throw new RepairServiceError(
         403,

@@ -289,13 +289,17 @@ describe("RepoMedic API bootstrap", () => {
   it("merges independent store snapshots and refuses a locked writer", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "repomedic-api-lock-"));
     const dataDir = join(temporaryRoot, "store");
+    const alternateRoot =
+      process.platform === "win32"
+        ? process.cwd().toUpperCase()
+        : process.cwd();
     const first = new FileRepairRunStore({
       dataDir,
       repositoryRoot: process.cwd(),
     });
     const second = new FileRepairRunStore({
       dataDir,
-      repositoryRoot: process.cwd(),
+      repositoryRoot: alternateRoot,
     });
 
     try {
@@ -306,7 +310,7 @@ describe("RepoMedic API bootstrap", () => {
 
       const restored = new FileRepairRunStore({
         dataDir,
-        repositoryRoot: process.cwd(),
+        repositoryRoot: alternateRoot,
       }).load();
       expect(restored.map((run) => run.id).sort()).toEqual([
         "repair-first",
