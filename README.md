@@ -89,14 +89,18 @@ npm run dev:web
 
 # Start the API
 npm run dev:api
+
+# Start both services with the alternate local ports (4400 / 4300)
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
 
 The API exposes `/healthz`, `/readyz`, `/metrics`, and the repair lifecycle at
 `/v1/repairs`. The dashboard connects through the generated
 `@jasonTM17/api-client` package. By default, runs are local and persist under
-`.repomedic/`; interrupted runs are recovered as failed with an explicit reason.
-Select the `openai` backend only after configuring `OPENAI_API_KEY`; the `fake`
-backend is deterministic and useful for local UI verification.
+`.repomedic/`; interrupted runs are recovered as `recovery-required` and cannot
+continue mutating automatically. Select the `openai` backend only after
+configuring `OPENAI_API_KEY`; the `fake` backend is diagnosis-only and
+deterministic for local UI verification.
 
 ## Architecture
 

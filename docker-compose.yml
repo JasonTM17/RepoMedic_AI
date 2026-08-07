@@ -10,7 +10,7 @@ services:
       - HOST=0.0.0.0
       - REPOMEDIC_REPO_ROOT=/workspace/repository
       - REPOMEDIC_DATA_DIR=/workspace/repository/.repomedic/docker
-      - CORS_ORIGIN=http://localhost:3000
+      - CORS_ORIGIN=http://localhost:${REPOMEDIC_LOCAL_WEB_PORT:-3000}
       - REPOMEDIC_API_TOKEN=${REPOMEDIC_API_TOKEN:-}
     volumes:
       - .:/workspace/repository
@@ -35,6 +35,7 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
+        NEXT_PUBLIC_REPOMEDIC_API_URL: http://localhost:${REPOMEDIC_LOCAL_API_PORT:-4000}
         NEXT_PUBLIC_REPOMEDIC_API_TOKEN: ${REPOMEDIC_API_TOKEN:-}
     ports:
       - "127.0.0.1:3000:3000"

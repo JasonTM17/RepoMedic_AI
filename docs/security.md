@@ -22,7 +22,7 @@ Key behaviors:
 
 - Resolves paths using `fs.realpath` before access
 - Rejects resolved paths that escape the repository root
-- Blocks access to `.git/`, `.env`, and other protected paths
+- Blocks access to `.git/`, `.repomedic/`, `.env`, and other protected paths
 - Bounds file and directory reads
 
 ### SecureFileAccessor (packages/fs-guard)
@@ -63,6 +63,9 @@ Key behaviors:
 Automatic retry applies only exact unified-diff operations with hunks. Review
 failure is reverted with `git apply --reverse` using those exact operations;
 path-only rollback is rejected so unrelated dirty files are not restored over.
+The candidate is built and dry-checked before approval. Its SHA-256 digest and
+old-file hashes are persisted; approval applies only that exact candidate and
+rejects worktree drift.
 
 ### API boundary
 

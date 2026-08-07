@@ -2,6 +2,11 @@ services:
   api:
     ports: !override
       - "127.0.0.1:${REPOMEDIC_LOCAL_API_PORT:-4400}:4000"
+    environment:
+      CORS_ORIGIN: http://localhost:${REPOMEDIC_LOCAL_WEB_PORT:-4300}
   web:
     ports: !override
       - "127.0.0.1:${REPOMEDIC_LOCAL_WEB_PORT:-4300}:3000"
+    build:
+      args:
+        NEXT_PUBLIC_REPOMEDIC_API_URL: http://localhost:${REPOMEDIC_LOCAL_API_PORT:-4400}

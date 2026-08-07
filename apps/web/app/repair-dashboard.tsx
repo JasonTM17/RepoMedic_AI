@@ -48,6 +48,27 @@ function replaceRun(runs: RepairRun[], updated: RepairRun): RepairRun[] {
   return [updated, ...withoutUpdated];
 }
 
+function formatProposalDiff(operations: readonly PatchOperation[]): string {
+  const patches = operations
+    .map((operation) => {
+      if (operation.kind === "rename" || operation.kind === "chmod") {
+        return "";
+      }
+      const hunks = operation.hunks ?? [];
+      if (hunks.length === 0) return "";
+      const oldPath =
+        operation.kind === "create" ? "/dev/null" : `a/${operation.path}`;
+      const newPath =
+        operation.kind === "delete" ? "/dev/null" : `b/${operation.path}`;
+      return [`--- ${oldPath}`, `+++ ${newPath}`, ...hunks].join("\n");
+    })
+    .filter(Boolean)
+    .join("\n");
+  return patches.length > 0
+    ? `${patches}\n`
+    : "No exact diff candidate was generated for this diagnosis-only run.";
+}
+
 export default function RepairDashboard() {
   const client = useMemo(
     () =>
@@ -185,7 +206,9 @@ export default function RepairDashboard() {
                 value={backend}
                 onChange={(event) => setBackend(event.target.value as Backend)}
               >
-                <option value="fake">Fake · deterministic local demo</option>
+                <option value="fake">
+                  Fake · diagnosis-only deterministic mode
+                </option>
                 <option value="openai">OpenAI · requires API key</option>
               </select>
             </div>
@@ -328,6 +351,12 @@ export default function RepairDashboard() {
           {selectedRun.proposal ? (
             <div className="evidence-block">
               <h3>Proposed operations</h3>
+              {selectedRun.proposal.digest ? (
+                <p className="field-help">
+                  Exact candidate digest:{" "}
+                  <code>{selectedRun.proposal.digest}</code>
+                </p>
+              ) : null}
               <ul className="operation-list">
                 {selectedRun.proposal.operations.map(
                   (operation: PatchOperation) => (
@@ -337,7 +366,21 @@ export default function RepairDashboard() {
                   ),
                 )}
               </ul>
+              <details className="diff-details">
+                <summary>View exact candidate diff</summary>
+                <pre className="diff-preview">
+                  {formatProposalDiff(selectedRun.proposal.operations)}
+                </pre>
+              </details>
             </div>
+          ) : null}
+
+          {selectedRun.status === "recovery-required" ? (
+            <p className="alert" role="alert">
+              This run was interrupted. Inspect the repository worktree before
+              taking any manual recovery action; automatic continuation is
+              blocked.
+            </p>
           ) : null}
 
           {selectedRun.status === "awaiting-approval" ? (

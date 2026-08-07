@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateRepairData, CreateRepairErrors, CreateRepairResponses, DecideRepairApprovalData, DecideRepairApprovalErrors, DecideRepairApprovalResponses, GetHealthData, GetHealthResponses, GetMetricsData, GetMetricsResponses, GetReadinessData, GetReadinessResponses, GetRepairData, GetRepairErrors, GetRepairResponses, ListRepairsData, ListRepairsResponses } from './types.gen';
+import type { CreateRepairData, CreateRepairErrors, CreateRepairResponses, DecideRepairApprovalData, DecideRepairApprovalErrors, DecideRepairApprovalResponses, GetHealthData, GetHealthResponses, GetMetricsData, GetMetricsResponses, GetReadinessData, GetReadinessResponses, GetRepairData, GetRepairErrors, GetRepairResponses, ListRepairsData, ListRepairsErrors, ListRepairsResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -27,7 +27,7 @@ export const getMetrics = <ThrowOnError extends boolean = false>(options?: Optio
 /**
  * List durable local repair runs.
  */
-export const listRepairs = <ThrowOnError extends boolean = false>(options?: Options<ListRepairsData, ThrowOnError>) => (options?.client ?? client).get<ListRepairsResponses, unknown, ThrowOnError>({
+export const listRepairs = <ThrowOnError extends boolean = false>(options?: Options<ListRepairsData, ThrowOnError>) => (options?.client ?? client).get<ListRepairsResponses, ListRepairsErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/v1/repairs',
     ...options

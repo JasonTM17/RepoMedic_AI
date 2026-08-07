@@ -2,12 +2,17 @@
 
 ## Purpose
 
-This package is the frontend-safe contract boundary for the separate API. It will be generated from `docs/openapi.yaml` and consumed by `apps/web`.
+This package is the frontend-safe contract boundary for the separate API. Its
+generated operations are consumed by `apps/web`; API internals must not be
+imported into the browser bundle.
 
 ## API surface
 
-- `createApiClientConfiguration` is the temporary bootstrap export.
-- Generated repair client operations arrive after the OpenAPI contract expands.
+- `createApiClient` creates a fetch client for an explicit API base URL.
+- `listRepairs`, `createRepair`, `getRepair`, and `decideRepairApproval` cover
+  the local repair lifecycle.
+- Repair proposals include the exact unified-diff hunks, old-file SHA values,
+  and candidate digest that the API will apply after approval.
 
 ## Env vars
 
@@ -15,7 +20,22 @@ This package is the frontend-safe contract boundary for the separate API. It wil
 | ---- | -------: | ------- | --------------------------------------- |
 | None |       No | —       | Consumers supply a base URL explicitly. |
 
-## Run locally
+## Regeneration
+
+```bash
+npm run generate:api-client
+```
+
+`docs/openapi.yaml` is the canonical contract. Generated files under
+`src/generated` are checked for drift in CI.
+
+## Authentication
+
+The API accepts an optional local bearer token. Consumers that configure one
+must pass `Authorization: Bearer <token>` through the generated client headers;
+the web app does this only when its public development token is configured.
+
+## Build locally
 
 ```bash
 npm run build:api-client

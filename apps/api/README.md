@@ -42,6 +42,10 @@ With Compose, the API root is `/workspace/repository`, backed by the current
 checkout as a read-write bind mount. This makes the container target the actual
 repository; it is not a generic remote multi-tenant service.
 
+For a second local stack, use `docker-compose.local.yml`; it publishes the API
+on `http://localhost:4400`, the dashboard on `http://localhost:4300`, and
+builds the browser client with the matching API URL.
+
 ## Test
 
 ```bash
@@ -52,8 +56,9 @@ npm test -- apps/api/tests
 
 Use `/healthz` for liveness and `/readyz` for readiness. Repair evidence is
 stored atomically in `repair-runs.v1.json` under `REPOMEDIC_DATA_DIR`; runs that
-were `diagnosing` or `running` during a restart are recovered as failed with an
-explicit interruption reason. Authentication and a multi-user deployment
+were `diagnosing` or `running` during a restart are recovered as
+`recovery-required`, which blocks automatic continuation or mutation until an
+operator inspects the worktree. Authentication and a multi-user deployment
 boundary remain outside this local-first workflow. Set `REPOMEDIC_API_TOKEN`
 when the API is reachable by another trusted process; health and readiness
 endpoints remain public for container healthchecks.
