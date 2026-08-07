@@ -22,6 +22,7 @@ type Backend = "fake" | "openai";
 
 const apiUrl =
   process.env.NEXT_PUBLIC_REPOMEDIC_API_URL ?? "http://localhost:4000";
+const apiToken = process.env.NEXT_PUBLIC_REPOMEDIC_API_TOKEN;
 
 function formatError(error: unknown): string {
   if (typeof error === "object" && error !== null && "message" in error) {
@@ -48,7 +49,16 @@ function replaceRun(runs: RepairRun[], updated: RepairRun): RepairRun[] {
 }
 
 export default function RepairDashboard() {
-  const client = useMemo(() => createApiClient(apiUrl), []);
+  const client = useMemo(
+    () =>
+      createApiClient(
+        apiUrl,
+        apiToken
+          ? { headers: { Authorization: `Bearer ${apiToken}` } }
+          : undefined,
+      ),
+    [],
+  );
   const [issueDescription, setIssueDescription] = useState("");
   const [allowlist, setAllowlist] = useState(".");
   const [backend, setBackend] = useState<Backend>("fake");

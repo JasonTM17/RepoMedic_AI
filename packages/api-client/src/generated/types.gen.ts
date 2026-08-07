@@ -192,6 +192,10 @@ export type CreateRepairErrors = {
      */
     400: ErrorResponse;
     /**
+     * A valid bearer token is required.
+     */
+    401: ErrorResponse;
+    /**
      * Requested repository root is outside the configured scope.
      */
     403: ErrorResponse;
@@ -218,6 +222,10 @@ export type GetRepairData = {
 };
 
 export type GetRepairErrors = {
+    /**
+     * A valid bearer token is required.
+     */
+    401: ErrorResponse;
     /**
      * The requested repair run does not exist.
      */
@@ -249,6 +257,10 @@ export type DecideRepairApprovalErrors = {
      * Request validation failed.
      */
     400: ErrorResponse;
+    /**
+     * A valid bearer token is required.
+     */
+    401: ErrorResponse;
     /**
      * The requested repair run does not exist.
      */
