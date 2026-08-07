@@ -1,5 +1,6 @@
 import type { PatchProposal, Approval } from "../domain/entities.js";
 import { approvalSchema } from "../schemas/index.js";
+import { formatPatchOperations } from "../tools/patch/create-patch-tool.js";
 
 export interface ApprovalCheckpointOptions {
   /**
@@ -23,9 +24,17 @@ export class ApprovalCheckpoint {
   async requestApproval(proposal: PatchProposal): Promise<Approval> {
     process.stdout.write("\n=== RepoMedic: Human Approval Required ===\n");
     process.stdout.write(`Proposal ID: ${proposal.id}\n`);
+    if (proposal.digest !== undefined) {
+      process.stdout.write(`Candidate digest: ${proposal.digest}\n`);
+    }
     process.stdout.write(`Operations (${proposal.operations.length}):\n`);
     for (const op of proposal.operations) {
       process.stdout.write(`  [${op.kind}] ${op.path}\n`);
+    }
+    const diff = formatPatchOperations(proposal.operations);
+    if (diff.length > 0) {
+      process.stdout.write("\nExact candidate diff:\n");
+      process.stdout.write(diff);
     }
     process.stdout.write('\nType "approve" to approve, "reject" to reject: ');
 

@@ -42,6 +42,9 @@ paths:
     post:
       operationId: createRepair
       summary: Diagnose a repository and create an approval-gated repair run.
+      security:
+        - BearerAuth: []
+        - {}
       requestBody:
         required: true
         content:
@@ -59,9 +62,16 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
     get:
       operationId: listRepairs
-      summary: List in-memory repair runs.
+      summary: List durable local repair runs.
+      security:
+        - BearerAuth: []
+        - {}
       responses:
         "200":
           description: Repair runs ordered by most recent update.
@@ -69,10 +79,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RepairListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /v1/repairs/{repairId}:
     get:
       operationId: getRepair
       summary: Read one repair run.
+      security:
+        - BearerAuth: []
+        - {}
       parameters:
         - $ref: "#/components/parameters/RepairId"
       responses:
@@ -84,10 +101,17 @@ paths:
                 $ref: "#/components/schemas/RepairRun"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /v1/repairs/{repairId}/approval:
     post:
       operationId: decideRepairApproval
       summary: Approve or reject an awaiting repair proposal.
+      security:
+        - BearerAuth: []
+        - {}
       parameters:
         - $ref: "#/components/parameters/RepairId"
       requestBody:
@@ -109,7 +133,16 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
   parameters:
     RepairId:
       name: repairId
@@ -139,6 +172,18 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     Conflict:
       description: The repair run is not awaiting an approval decision.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: A valid bearer token is required.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: The API could not complete the request.
       content:
         application/json:
           schema:
@@ -289,6 +334,10 @@ components:
           enum: [draft, ready, applied, partially-applied, failed, reverted]
         humanApprovalRequired:
           type: boolean
+        digest:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: SHA-256 digest of the exact unified diff shown for approval.
     Approval:
       type: object
       required: [proposalId, decidedBy, decision, decidedAt]
@@ -347,6 +396,7 @@ components:
               running,
               completed,
               rejected,
+              recovery-required,
               failed,
             ]
         createdAt:

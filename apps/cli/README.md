@@ -25,9 +25,9 @@ command policy.
 
 ## Env vars
 
-| Name                     | Required | Default           | Description                     |
-| ------------------------ | -------: | ----------------- | ------------------------------- |
-| `REPOMEDIC_ALLOWED_ROOT` |       No | Current directory | Allowed target-repository root. |
+| Name             | Required | Default | Description                                |
+| ---------------- | -------- | ------- | ------------------------------------------ |
+| `OPENAI_API_KEY` | OpenAI   | unset   | Provider credential when `--model openai`. |
 
 ## Run locally
 

@@ -174,7 +174,8 @@ main > p:not(.environment-note):not([aria-label]) {
 }
 
 .status-rejected,
-.status-failed {
+.status-failed,
+.status-recovery-required {
   background: #542d3a;
   color: #ffc1ce;
 }
@@ -183,6 +184,30 @@ main > p:not(.environment-note):not([aria-label]) {
 .repair-form > div {
   display: grid;
   gap: 0.55rem;
+}
+
+.diff-details {
+  margin-top: 1rem;
+}
+
+.diff-details summary {
+  cursor: pointer;
+  color: #c7ddff;
+  font-weight: 700;
+}
+
+.diff-preview {
+  max-height: 24rem;
+  overflow: auto;
+  margin-top: 0.7rem;
+  padding: 0.85rem;
+  border: 1px solid #314568;
+  border-radius: 0.6rem;
+  background: #0a1221;
+  color: #d8e3f8;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .repair-form {

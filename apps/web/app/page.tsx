@@ -9,7 +9,7 @@ export default function HomePage() {
         <h1>{dashboardTitle}</h1>
         <p>{dashboardDescription}</p>
         <p className="environment-note">
-          Local mode · runs are kept in API memory until the server restarts.
+          Local mode · runs persist in the API&apos;s local JSON store.
         </p>
         <RepairDashboard />
       </main>

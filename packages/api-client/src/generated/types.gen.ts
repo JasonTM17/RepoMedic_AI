@@ -66,6 +66,10 @@ export type PatchProposal = {
     operations: Array<PatchOperation>;
     status: 'draft' | 'ready' | 'applied' | 'partially-applied' | 'failed' | 'reverted';
     humanApprovalRequired: boolean;
+    /**
+     * SHA-256 digest of the exact unified diff shown for approval.
+     */
+    digest?: string;
 };
 
 export type Approval = {
@@ -85,7 +89,7 @@ export type BoundedRetryResult = {
 
 export type RepairRun = {
     id: string;
-    status: 'diagnosing' | 'awaiting-approval' | 'running' | 'completed' | 'rejected' | 'failed';
+    status: 'diagnosing' | 'awaiting-approval' | 'running' | 'completed' | 'rejected' | 'recovery-required' | 'failed';
     createdAt: string;
     updatedAt: string;
     request: RepairRequestSnapshot;
@@ -170,6 +174,19 @@ export type ListRepairsData = {
     url: '/v1/repairs';
 };
 
+export type ListRepairsErrors = {
+    /**
+     * A valid bearer token is required.
+     */
+    401: ErrorResponse;
+    /**
+     * The API could not complete the request.
+     */
+    500: ErrorResponse;
+};
+
+export type ListRepairsError = ListRepairsErrors[keyof ListRepairsErrors];
+
 export type ListRepairsResponses = {
     /**
      * Repair runs ordered by most recent update.
@@ -192,9 +209,17 @@ export type CreateRepairErrors = {
      */
     400: ErrorResponse;
     /**
+     * A valid bearer token is required.
+     */
+    401: ErrorResponse;
+    /**
      * Requested repository root is outside the configured scope.
      */
     403: ErrorResponse;
+    /**
+     * The API could not complete the request.
+     */
+    500: ErrorResponse;
 };
 
 export type CreateRepairError = CreateRepairErrors[keyof CreateRepairErrors];
@@ -219,9 +244,17 @@ export type GetRepairData = {
 
 export type GetRepairErrors = {
     /**
+     * A valid bearer token is required.
+     */
+    401: ErrorResponse;
+    /**
      * The requested repair run does not exist.
      */
     404: ErrorResponse;
+    /**
+     * The API could not complete the request.
+     */
+    500: ErrorResponse;
 };
 
 export type GetRepairError = GetRepairErrors[keyof GetRepairErrors];
@@ -250,6 +283,10 @@ export type DecideRepairApprovalErrors = {
      */
     400: ErrorResponse;
     /**
+     * A valid bearer token is required.
+     */
+    401: ErrorResponse;
+    /**
      * The requested repair run does not exist.
      */
     404: ErrorResponse;
@@ -257,6 +294,10 @@ export type DecideRepairApprovalErrors = {
      * The repair run is not awaiting an approval decision.
      */
     409: ErrorResponse;
+    /**
+     * The API could not complete the request.
+     */
+    500: ErrorResponse;
 };
 
 export type DecideRepairApprovalError = DecideRepairApprovalErrors[keyof DecideRepairApprovalErrors];

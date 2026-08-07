@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 import express, { type ErrorRequestHandler } from "express";
 
 import {
@@ -6,7 +8,9 @@ import {
   RepairService,
   RepairServiceError,
   repairRequestSchema,
+  MemoryRepairRunStore,
   type ModelFactory,
+  type RepairRunStore,
   type RepairServiceOptions,
 } from "./repair-service.js";
 
@@ -17,6 +21,10 @@ export interface CreateAppOptions {
   checksToRun?: RepairServiceOptions["checksToRun"];
   maxExplorerIterations?: number;
   maxStoredRuns?: number;
+  persistence?: "file" | "memory";
+  dataDir?: string;
+  store?: RepairRunStore;
+  apiToken?: string | null;
 }
 
 function validationDetails(error: {
@@ -66,7 +74,10 @@ function installCors(app: express.Express): void {
     if (origin !== undefined && isAllowed) {
       response.setHeader("Access-Control-Allow-Origin", origin);
       response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-      response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      response.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization",
+      );
     }
 
     if (request.method === "OPTIONS") {
@@ -82,6 +93,41 @@ function installCors(app: express.Express): void {
     }
 
     next();
+  });
+}
+
+function hasValidBearerToken(
+  authorization: string | undefined,
+  expectedToken: string,
+): boolean {
+  const match = authorization?.match(/^Bearer\s+(.+)$/i);
+  if (!match?.[1]) return false;
+  const received = Buffer.from(match[1].trim());
+  const expected = Buffer.from(expectedToken);
+  return (
+    received.length === expected.length && timingSafeEqual(received, expected)
+  );
+}
+
+function installApiAuth(app: express.Express, configuredToken?: string): void {
+  const token = configuredToken?.trim();
+  if (!token) return;
+
+  app.use((request, response, next) => {
+    if (!request.path.startsWith("/v1/")) {
+      next();
+      return;
+    }
+
+    if (hasValidBearerToken(request.header("authorization"), token)) {
+      next();
+      return;
+    }
+
+    response.status(401).json({
+      code: "UNAUTHORIZED",
+      message: "A valid bearer token is required for repair API access.",
+    });
   });
 }
 
@@ -104,11 +150,26 @@ export function createApp(options: CreateAppOptions = {}) {
       ...(options.maxStoredRuns !== undefined
         ? { maxStoredRuns: options.maxStoredRuns }
         : {}),
+      ...(options.store !== undefined
+        ? { store: options.store }
+        : options.persistence === "memory"
+          ? { store: new MemoryRepairRunStore() }
+          : {}),
+      ...(options.dataDir !== undefined ? { dataDir: options.dataDir } : {}),
+      ...(options.dataDir === undefined && process.env["REPOMEDIC_DATA_DIR"]
+        ? { dataDir: process.env["REPOMEDIC_DATA_DIR"] }
+        : {}),
     });
 
   app.disable("x-powered-by");
-  app.use(express.json({ limit: "32kb" }));
   installCors(app);
+  installApiAuth(
+    app,
+    options.apiToken === undefined
+      ? process.env["REPOMEDIC_API_TOKEN"]
+      : (options.apiToken ?? undefined),
+  );
+  app.use(express.json({ limit: "32kb" }));
 
   app.get("/healthz", (_request, response) => {
     response.status(200).json({ status: "ok" });

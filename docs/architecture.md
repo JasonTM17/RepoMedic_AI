@@ -24,9 +24,11 @@ RepoMedic is a local-first AI bug triage and guarded patch assistant, organized 
 - **cli**: Command-line interface for running RepoMedic commands locally (`apps/cli`).
 - **api**: Express health/readiness/metrics plus the local repair lifecycle
   (`apps/api`). It orchestrates core diagnosis, approval, and bounded retry with
-  an in-memory run store.
+  an atomic local JSON run store with restart recovery.
 - **web**: Next.js dashboard for repair submission, evidence review, approval,
   and result reporting (`apps/web`). It consumes only the generated client.
+- **Compose**: the default browser/API pair uses ports 3000/4000; the local
+  overlay keeps its browser-visible URL aligned when using 4300/4400.
 
 ## Core Modules
 
@@ -88,6 +90,8 @@ sequenceDiagram
     Web->>API: POST /v1/repairs
     API->>Core: Explorer diagnosis
     Core-->>API: Issues and draft proposal
+    API->>Core: Build and validate exact candidate diff
+    Core-->>API: Ready proposal with hunks and digest
     API-->>Web: awaiting-approval run
     User->>Web: Review evidence
     Web->>API: POST /v1/repairs/:id/approval
@@ -96,7 +100,12 @@ sequenceDiagram
     API-->>Web: completed or failed run
 ```
 
-The API is intentionally local-first: its run store is in memory, its root is
-configured at process startup, and browser access is restricted by an explicit
-`CORS_ORIGIN`. Durable persistence, authentication, and multi-user coordination
-remain deployment concerns rather than hidden promises of this local workflow.
+The API is intentionally local-first: its run store is an atomic JSON file under
+`.repomedic/`, its root is configured at process startup, and browser access is
+restricted by an explicit `CORS_ORIGIN`. The store is denied to agent path
+access. A restart during diagnosis or application produces
+`recovery-required`; the service does not guess whether a patch was applied.
+Authentication and multi-user coordination remain deployment concerns rather
+than hidden promises of this local workflow. The Compose API mounts the
+repository at the configured root so the container operates on the actual
+checked-out files, not only its runtime image.

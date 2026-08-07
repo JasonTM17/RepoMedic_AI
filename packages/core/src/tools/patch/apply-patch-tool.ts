@@ -8,18 +8,35 @@ import { boundedExec } from "../../process/index.js";
 import type { PatchProposal } from "../../domain/entities.js";
 import { patchOk, patchFail, type PatchToolResult } from "./patch-result.js";
 import { formatPatchOperations } from "./create-patch-tool.js";
+import {
+  calculatePatchDigest,
+  verifyPatchPreconditions,
+} from "./patch-integrity.js";
 
 export interface ApplyPatchInput {
   root: string;
   allowlist: readonly string[];
   proposal: PatchProposal;
   approved: boolean;
+  /** Validate the exact candidate without mutating the worktree. */
+  preview?: boolean;
 }
 
 export async function applyPatchTool(
   input: ApplyPatchInput,
 ): Promise<PatchToolResult> {
   const { root, allowlist, proposal, approved } = input;
+
+  if (proposal.digest !== undefined) {
+    if (calculatePatchDigest(proposal.operations) !== proposal.digest) {
+      return patchFail("Immutable patch digest does not match its operations.");
+    }
+    try {
+      await verifyPatchPreconditions(root, allowlist, proposal.operations);
+    } catch (error) {
+      return patchFail(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   // Gate every operation through MutationPolicy before touching the filesystem
   for (const op of proposal.operations) {
@@ -72,7 +89,7 @@ export async function applyPatchTool(
       await fs.writeFile(tempPath, diffText, "utf8");
       const checkResult = await boundedExec(
         "git",
-        ["apply", "--check", tempPath],
+        ["apply", "--check", "--unidiff-zero", tempPath],
         {
           cwd: root,
           timeoutMs: 30_000,
@@ -84,17 +101,23 @@ export async function applyPatchTool(
         );
       }
 
-      // `--reject` is intentionally omitted: after the clean preflight,
-      // git's default all-or-nothing apply behavior is the transaction
-      // boundary. Unexpected failure is surfaced instead of guessed rollback.
-      const result = await boundedExec("git", ["apply", tempPath], {
-        cwd: root,
-        timeoutMs: 30_000,
-      });
-      if (result.exitCode !== 0) {
-        return patchFail(
-          `git apply failed after preflight: ${result.stderr || result.stdout || "unknown apply failure"}`,
+      if (!input.preview) {
+        // `--reject` is intentionally omitted: after the clean preflight,
+        // git's default all-or-nothing apply behavior is the transaction
+        // boundary. Unexpected failure is surfaced instead of guessed rollback.
+        const result = await boundedExec(
+          "git",
+          ["apply", "--unidiff-zero", tempPath],
+          {
+            cwd: root,
+            timeoutMs: 30_000,
+          },
         );
+        if (result.exitCode !== 0) {
+          return patchFail(
+            `git apply failed after preflight: ${result.stderr || result.stdout || "unknown apply failure"}`,
+          );
+        }
       }
     } catch (err) {
       return patchFail(err instanceof Error ? err.message : String(err));

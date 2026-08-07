@@ -57,10 +57,14 @@ export async function revertPatchTool(
 
   try {
     await fs.writeFile(tempPath, diffText, "utf8");
-    const result = await boundedExec("git", ["apply", "--reverse", tempPath], {
-      cwd: input.root,
-      timeoutMs: 15_000,
-    });
+    const result = await boundedExec(
+      "git",
+      ["apply", "--reverse", "--unidiff-zero", tempPath],
+      {
+        cwd: input.root,
+        timeoutMs: 15_000,
+      },
+    );
     if (result.exitCode !== 0) {
       return patchFail(
         result.stderr || result.stdout || "git apply --reverse failed",

@@ -11,14 +11,15 @@ the guarded patch workflow. It uses only the generated
 
 - `GET /healthz` — local web health route.
 - `@jasonTM17/api-client` owns health, repair, list, detail, and approval calls.
-- The UI labels its state as local/in-memory; it does not claim persistence,
-  authentication, live metrics, or multi-user coordination.
+- The UI labels its state as local; runs persist in the API's local JSON store,
+  while authentication and multi-user coordination are not claimed.
 
 ## Env vars
 
-| Name                            | Required | Default                 | Description   |
-| ------------------------------- | -------: | ----------------------- | ------------- |
-| `NEXT_PUBLIC_REPOMEDIC_API_URL` |       No | `http://localhost:4000` | API base URL. |
+| Name                              | Required | Default                 | Description                                       |
+| --------------------------------- | -------: | ----------------------- | ------------------------------------------------- |
+| `NEXT_PUBLIC_REPOMEDIC_API_URL`   |       No | `http://localhost:4000` | API base URL.                                     |
+| `NEXT_PUBLIC_REPOMEDIC_API_TOKEN` |       No | unset                   | Optional local bearer token forwarded to the API. |
 
 ## Run locally
 
@@ -36,4 +37,5 @@ npm test -- apps/web/tests
 
 Check `/healthz` when diagnosing a dashboard issue, then check the configured
 API base URL and the API `/readyz` route. Browser calls require the API's
-`CORS_ORIGIN` to include the web origin.
+`CORS_ORIGIN` to include the web origin. If `REPOMEDIC_API_TOKEN` is set on the
+API, provide the matching public development token at build time.

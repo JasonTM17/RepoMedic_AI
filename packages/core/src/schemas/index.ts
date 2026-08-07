@@ -49,6 +49,10 @@ export const patchProposalSchema = z
     operations: z.array(patchOperationSchema).min(1),
     status: z.enum(patchStatusValues),
     humanApprovalRequired: z.boolean(),
+    digest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
   })
   .strict();
 

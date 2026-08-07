@@ -49,6 +49,16 @@ describe("checkPathAllowlist", () => {
     expect(decision.violations[0]?.code).toBe("denied-path");
   });
 
+  it("does not expose the local repair store to agents", () => {
+    const decision = checkPathAllowlist(
+      ROOT,
+      ["."],
+      ".repomedic/repair-runs.v1.json",
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.violations[0]?.code).toBe("denied-path");
+  });
+
   it("rejects an empty path", () => {
     const decision = checkPathAllowlist(ROOT, ALLOWLIST, "");
     expect(decision.allowed).toBe(false);

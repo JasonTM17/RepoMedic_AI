@@ -11,6 +11,7 @@ import { createProgram } from "../src/index.js";
 
 const mocks = vi.hoisted(() => ({
   runCoordinator: vi.fn(),
+  preparePatchProposal: vi.fn(),
   runBoundedRetry: vi.fn(),
   requestApproval: vi.fn(),
 }));
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@jasonTM17/core", () => ({
   createModelAdapter: vi.fn(() => ({ name: "fake", complete: vi.fn() })),
   runCoordinator: mocks.runCoordinator,
+  preparePatchProposal: mocks.preparePatchProposal,
   ApprovalCheckpoint: vi.fn().mockImplementation(() => ({
     requestApproval: mocks.requestApproval,
   })),
@@ -71,6 +73,7 @@ function approval(decision: Approval["decision"]): Approval {
 describe("CLI triage patch pipeline wiring", () => {
   beforeEach(() => {
     mocks.runCoordinator.mockReset();
+    mocks.preparePatchProposal.mockReset();
     mocks.runBoundedRetry.mockReset();
     mocks.requestApproval.mockReset();
     process.exitCode = undefined;
@@ -82,6 +85,12 @@ describe("CLI triage patch pipeline wiring", () => {
 
   it("reports success and exits 0 when the pipeline applies the patch", async () => {
     mocks.runCoordinator.mockResolvedValue(buildCoordinatorResult());
+    mocks.preparePatchProposal.mockResolvedValue({
+      success: true,
+      appliedOperations: [],
+      iterations: 1,
+      proposal: buildCoordinatorResult().proposal,
+    });
     mocks.requestApproval.mockResolvedValue(approval("approved"));
     const retryResult: BoundedRetryResult = {
       success: true,
@@ -112,6 +121,12 @@ describe("CLI triage patch pipeline wiring", () => {
 
   it("surfaces failure and exits non-zero when the pipeline fails", async () => {
     mocks.runCoordinator.mockResolvedValue(buildCoordinatorResult());
+    mocks.preparePatchProposal.mockResolvedValue({
+      success: true,
+      appliedOperations: [],
+      iterations: 1,
+      proposal: buildCoordinatorResult().proposal,
+    });
     mocks.requestApproval.mockResolvedValue(approval("approved"));
     const retryResult: BoundedRetryResult = {
       success: false,
@@ -139,6 +154,12 @@ describe("CLI triage patch pipeline wiring", () => {
 
   it("surfaces revert failure and exits non-zero", async () => {
     mocks.runCoordinator.mockResolvedValue(buildCoordinatorResult());
+    mocks.preparePatchProposal.mockResolvedValue({
+      success: true,
+      appliedOperations: [],
+      iterations: 1,
+      proposal: buildCoordinatorResult().proposal,
+    });
     mocks.requestApproval.mockResolvedValue(approval("approved"));
     mocks.runBoundedRetry.mockResolvedValue({
       success: false,
@@ -165,6 +186,12 @@ describe("CLI triage patch pipeline wiring", () => {
 
   it("reports a successful no-op without setting a failure exit code", async () => {
     mocks.runCoordinator.mockResolvedValue(buildCoordinatorResult());
+    mocks.preparePatchProposal.mockResolvedValue({
+      success: true,
+      appliedOperations: [],
+      iterations: 1,
+      proposal: buildCoordinatorResult().proposal,
+    });
     mocks.requestApproval.mockResolvedValue(approval("approved"));
     mocks.runBoundedRetry.mockResolvedValue({
       success: true,
@@ -207,6 +234,12 @@ describe("CLI triage patch pipeline wiring", () => {
 
   it("forwards --max-retries to the bounded retry pipeline", async () => {
     mocks.runCoordinator.mockResolvedValue(buildCoordinatorResult());
+    mocks.preparePatchProposal.mockResolvedValue({
+      success: true,
+      appliedOperations: [],
+      iterations: 1,
+      proposal: buildCoordinatorResult().proposal,
+    });
     mocks.requestApproval.mockResolvedValue(approval("approved"));
     const retryResult: BoundedRetryResult = {
       success: true,
@@ -253,6 +286,12 @@ describe("CLI triage patch pipeline wiring", () => {
 
   it("does not run the pipeline and exits 0 when approval is rejected", async () => {
     mocks.runCoordinator.mockResolvedValue(buildCoordinatorResult());
+    mocks.preparePatchProposal.mockResolvedValue({
+      success: true,
+      appliedOperations: [],
+      iterations: 1,
+      proposal: buildCoordinatorResult().proposal,
+    });
     mocks.requestApproval.mockResolvedValue(approval("rejected"));
 
     await createProgram().parseAsync([

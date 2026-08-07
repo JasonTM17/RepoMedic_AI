@@ -76,6 +76,7 @@ export function createProgram(): Command {
       const {
         createModelAdapter,
         runCoordinator,
+        preparePatchProposal,
         ApprovalCheckpoint,
         runBoundedRetry,
       } = await import("@jasonTM17/core");
@@ -118,9 +119,25 @@ export function createProgram(): Command {
         return;
       }
 
+      process.stdout.write("\nPreparing exact candidate for review...\n");
+      const candidate = await preparePatchProposal({
+        model,
+        proposal: coordResult.proposal,
+        issues: coordResult.issues,
+        allowlist,
+        root,
+      });
+      if (!candidate.success || !candidate.proposal) {
+        process.stderr.write(
+          `\nPatch candidate preparation failed: ${candidate.error ?? "no immutable candidate was produced"}\n`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+
       // Human approval
       const checkpoint = new ApprovalCheckpoint();
-      const approval = await checkpoint.requestApproval(coordResult.proposal);
+      const approval = await checkpoint.requestApproval(candidate.proposal);
 
       if (approval.decision !== "approved") {
         process.stdout.write(
@@ -137,7 +154,7 @@ export function createProgram(): Command {
       try {
         retryResult = await runBoundedRetry({
           model,
-          proposal: coordResult.proposal,
+          proposal: candidate.proposal,
           issues: coordResult.issues,
           approved: true,
           allowlist,

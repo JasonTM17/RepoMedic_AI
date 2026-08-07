@@ -52,7 +52,7 @@ function hasUnsafeComponent(path: string): boolean {
 }
 
 function isDeniedComponent(component: string): boolean {
-  return component === ".git";
+  return component === ".git" || component === ".repomedic";
 }
 
 /**

@@ -6,6 +6,11 @@ import type {
 } from "../../domain/entities.js";
 import { applyPatchTool } from "../../tools/patch/apply-patch-tool.js";
 import { createPatchFromDiff } from "../../tools/patch/create-patch-tool.js";
+import {
+  calculatePatchDigest,
+  capturePatchPostconditions,
+  capturePatchPreconditions,
+} from "../../tools/patch/patch-integrity.js";
 
 export interface PatchAuthorOptions {
   model: ModelAdapter;
@@ -16,6 +21,9 @@ export interface PatchAuthorOptions {
   /** Failed check results from previous attempt, used as feedback */
   previousFailures?: string;
   maxIterations?: number; // default 5
+  /** Generate and validate a candidate without touching the worktree. */
+  preview?: boolean;
+  root?: string;
 }
 
 export interface PatchAuthorResult {
@@ -23,6 +31,7 @@ export interface PatchAuthorResult {
   appliedOperations: PatchOperation[];
   error?: string;
   iterations: number;
+  proposal?: PatchProposal;
 }
 
 function operationKey(
@@ -82,9 +91,11 @@ export async function runPatchAuthorAgent(
     allowlist,
     previousFailures,
     maxIterations = 5,
+    preview = false,
+    root,
   } = options;
 
-  if (!approved) {
+  if (!approved && !preview) {
     return {
       success: false,
       appliedOperations: [],
@@ -102,6 +113,51 @@ export async function runPatchAuthorAgent(
       appliedOperations: [],
       error:
         "Automatic patch authoring supports only create, modify, and delete unified-diff operations.",
+      iterations: 0,
+    };
+  }
+
+  if (!preview && proposal.digest !== undefined) {
+    const result = await applyPatchTool({
+      root: proposal.target.rootPath,
+      allowlist,
+      proposal,
+      approved,
+    });
+    if (!result.success) {
+      return {
+        success: false,
+        appliedOperations: [],
+        error: result.error ?? result.message,
+        iterations: 1,
+      };
+    }
+
+    let appliedOperations = proposal.operations;
+    try {
+      appliedOperations = await capturePatchPostconditions(
+        proposal.target.rootPath,
+        allowlist,
+        proposal.operations,
+      );
+    } catch {
+      // The mutation already passed the exact precondition gate. Keep the
+      // approved operations if postcondition hashing is unavailable.
+    }
+
+    return {
+      success: true,
+      appliedOperations,
+      iterations: 1,
+      proposal: { ...proposal, operations: appliedOperations },
+    };
+  }
+
+  if (preview && root === undefined) {
+    return {
+      success: false,
+      appliedOperations: [],
+      error: "Patch preview requires a repository root.",
       iterations: 0,
     };
   }
@@ -174,6 +230,62 @@ export async function runPatchAuthorAgent(
         ...proposal,
         operations: parsed.operations,
       };
+
+      if (preview) {
+        if (root === undefined) {
+          return {
+            success: false,
+            appliedOperations: [],
+            error: "Patch preview requires a repository root.",
+            iterations,
+          };
+        }
+        const previewRoot = root;
+        let preparedOperations;
+        try {
+          preparedOperations = await capturePatchPreconditions(
+            previewRoot,
+            allowlist,
+            parsed.operations,
+          );
+        } catch (error) {
+          return {
+            success: false,
+            appliedOperations: [],
+            error: error instanceof Error ? error.message : String(error),
+            iterations,
+          };
+        }
+
+        const preparedProposal: PatchProposal = {
+          ...updatedProposal,
+          operations: preparedOperations,
+          status: "ready",
+          digest: calculatePatchDigest(preparedOperations),
+        };
+        const validation = await applyPatchTool({
+          root: previewRoot,
+          allowlist,
+          proposal: preparedProposal,
+          approved: true,
+          preview: true,
+        });
+        if (!validation.success) {
+          return {
+            success: false,
+            appliedOperations: [],
+            error: validation.error ?? validation.message,
+            iterations,
+          };
+        }
+        return {
+          success: true,
+          appliedOperations: [],
+          iterations,
+          proposal: preparedProposal,
+        };
+      }
+
       const result = await applyPatchTool({
         root: proposal.target.rootPath,
         allowlist,
@@ -206,4 +318,19 @@ export async function runPatchAuthorAgent(
     error: "Max iterations reached without completing",
     iterations,
   };
+}
+
+/**
+ * Build the exact candidate that will later be shown at the human checkpoint.
+ * Preview mode performs policy, precondition, and `git apply --check` gates but
+ * never mutates the worktree.
+ */
+export async function preparePatchProposal(
+  options: Omit<PatchAuthorOptions, "approved" | "preview"> & { root: string },
+): Promise<PatchAuthorResult> {
+  return runPatchAuthorAgent({
+    ...options,
+    approved: false,
+    preview: true,
+  });
 }
