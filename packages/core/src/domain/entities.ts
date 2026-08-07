@@ -63,6 +63,8 @@ export interface PatchProposal {
   status: PatchStatus;
   /** When true, no operation may be applied before explicit human approval. */
   humanApprovalRequired: boolean;
+  /** SHA-256 digest of the exact unified diff approved by a human. */
+  digest?: string | undefined;
 }
 
 /** Result of an automated check (lint, typecheck, test) run against the repo. */

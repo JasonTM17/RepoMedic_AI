@@ -6,6 +6,10 @@ import { promisify } from "node:util";
 import { describe, it, expect } from "vitest";
 import { createPatchFromDiff } from "../src/tools/patch/create-patch-tool.js";
 import { applyPatchTool } from "../src/tools/patch/apply-patch-tool.js";
+import {
+  calculatePatchDigest,
+  capturePatchPreconditions,
+} from "../src/tools/patch/patch-integrity.js";
 import { revertPatchTool } from "../src/tools/patch/revert-patch-tool.js";
 import { patchOk, patchFail } from "../src/tools/patch/patch-result.js";
 
@@ -39,6 +43,90 @@ describe("Patch Tools", () => {
   });
 
   describe("applyPatchTool", () => {
+    it("previews an immutable candidate and rejects worktree or digest drift", async () => {
+      const root = await fs.mkdtemp(
+        path.join(os.tmpdir(), "repomedic-integrity-"),
+      );
+      try {
+        const filePath = path.join(root, "file.txt");
+        await fs.writeFile(filePath, "old\n", "utf8");
+        await execFile("git", ["init", "--quiet"], { cwd: root });
+        await execFile("git", ["config", "user.email", "test@example.com"], {
+          cwd: root,
+        });
+        await execFile("git", ["config", "user.name", "RepoMedic Test"], {
+          cwd: root,
+        });
+        await execFile("git", ["add", "file.txt"], { cwd: root });
+        await execFile("git", ["commit", "--quiet", "-m", "initial"], {
+          cwd: root,
+        });
+
+        const parsed = createPatchFromDiff({
+          diffText:
+            "--- a/file.txt\n+++ b/file.txt\n@@ -1,1 +1,1 @@\n-old\n+new\n",
+        });
+        const operation = parsed.operations?.[0];
+        if (!operation) throw new Error("Expected a parsed operation");
+        const operations = await capturePatchPreconditions(
+          root,
+          ["file.txt"],
+          [operation],
+        );
+        const proposal = {
+          id: "immutable-1",
+          target: { rootPath: root },
+          operations,
+          status: "ready" as const,
+          humanApprovalRequired: true,
+          digest: calculatePatchDigest(operations),
+        };
+
+        const preview = await applyPatchTool({
+          root,
+          allowlist: ["file.txt"],
+          proposal,
+          approved: true,
+          preview: true,
+        });
+        expect(preview.success).toBe(true);
+        expect(await fs.readFile(filePath, "utf8")).toBe("old\n");
+
+        await fs.writeFile(filePath, "changed\n", "utf8");
+        const drifted = await applyPatchTool({
+          root,
+          allowlist: ["file.txt"],
+          proposal,
+          approved: true,
+        });
+        expect(drifted.success).toBe(false);
+        expect(drifted.error).toContain("Patch precondition changed");
+
+        await fs.writeFile(filePath, "old\n", "utf8");
+        const digestDrift = await applyPatchTool({
+          root,
+          allowlist: ["file.txt"],
+          proposal: { ...proposal, digest: "0".repeat(64) },
+          approved: true,
+        });
+        expect(digestDrift.success).toBe(false);
+        expect(digestDrift.error).toContain("digest does not match");
+
+        const applied = await applyPatchTool({
+          root,
+          allowlist: ["file.txt"],
+          proposal,
+          approved: true,
+        });
+        expect(applied.success).toBe(true);
+        expect(
+          (await fs.readFile(filePath, "utf8")).replace(/\r\n/g, "\n"),
+        ).toBe("new\n");
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    });
+
     it("returns patchFail when approved=false (policy blocks it)", async () => {
       const result = await applyPatchTool({
         root: "/mock/root",

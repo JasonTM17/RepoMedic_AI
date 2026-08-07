@@ -100,8 +100,9 @@ function hasValidBearerToken(
   authorization: string | undefined,
   expectedToken: string,
 ): boolean {
-  if (!authorization?.startsWith("Bearer ")) return false;
-  const received = Buffer.from(authorization.slice("Bearer ".length));
+  const match = authorization?.match(/^Bearer\s+(.+)$/i);
+  if (!match?.[1]) return false;
+  const received = Buffer.from(match[1].trim());
   const expected = Buffer.from(expectedToken);
   return (
     received.length === expected.length && timingSafeEqual(received, expected)

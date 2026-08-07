@@ -100,6 +100,11 @@ export async function runBoundedRetry(
       };
     }
 
+    if (authorResult.proposal !== undefined) {
+      proposal.operations = authorResult.proposal.operations;
+      proposal.digest = authorResult.proposal.digest;
+    }
+
     if (authorResult.appliedOperations.length === 0) {
       if (proposal.operations.length > 0) {
         return {
@@ -150,6 +155,15 @@ export async function runBoundedRetry(
           attempts: attempt,
           finalStatus: "revert-failed",
           summary: `Review failed and revert failed: ${revertResult.error ?? revertResult.message}`,
+        };
+      }
+
+      if (proposal.digest !== undefined) {
+        return {
+          success: false,
+          attempts: attempt,
+          finalStatus: "reverted",
+          summary: `${reviewResult.summary} The immutable approved patch was reverted; a new candidate requires a new human approval.`,
         };
       }
     }

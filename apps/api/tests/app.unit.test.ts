@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -10,6 +10,7 @@ import { FakeModelAdapter } from "@jasonTM17/core";
 import { createApp } from "../src/app.js";
 import {
   FileRepairRunStore,
+  discoverRepositoryRoot,
   type ModelFactory,
   type RepairRun,
 } from "../src/repair-service.js";
@@ -17,8 +18,17 @@ import {
 const diagnosisResponse =
   'DIAGNOSIS:[{"id":"issue-1","file":"README.md","severity":"low","confidence":0.9,"description":"The README needs a small correction.","evidence":["A failing documentation check identified the stale statement."],"relatedFiles":[]} ]';
 
+const patchResponse = `PATCH:
+--- a/README.md
++++ b/README.md
+@@ -1,1 +1,1 @@
+-# RepoMedic AI
++# RepoMedic AI (candidate)
+`;
+
 function queuedModelFactory(responses: string[]): ModelFactory {
-  return () => new FakeModelAdapter([responses.shift() ?? "DONE"]);
+  const adapter = new FakeModelAdapter(responses);
+  return () => adapter;
 }
 
 function createTestApp(
@@ -61,7 +71,7 @@ describe("RepoMedic API bootstrap", () => {
 
   it("creates, lists, retrieves, and rejects a repair run", async () => {
     const app = createTestApp({
-      modelFactory: queuedModelFactory([diagnosisResponse]),
+      modelFactory: queuedModelFactory([diagnosisResponse, patchResponse]),
       checksToRun: [],
     });
 
@@ -77,6 +87,11 @@ describe("RepoMedic API bootstrap", () => {
     expect(created.body.status).toBe("awaiting-approval");
     expect(created.body.issues).toHaveLength(1);
     expect(created.body.proposal.operations[0].path).toBe("README.md");
+    expect(created.body.proposal.digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(created.body.proposal.operations[0].oldSha).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+    expect(created.body.proposal.operations[0].hunks).toHaveLength(1);
 
     const listed = await request(app).get("/v1/repairs");
     expect(listed.status).toBe(200);
@@ -103,8 +118,15 @@ describe("RepoMedic API bootstrap", () => {
 
   it("runs the approved workflow and records a bounded failure", async () => {
     const app = createTestApp({
-      modelFactory: queuedModelFactory([diagnosisResponse, "DONE"]),
-      checksToRun: [],
+      modelFactory: queuedModelFactory([diagnosisResponse, patchResponse]),
+      checksToRun: [
+        {
+          name: "forced-failure",
+          command: "node",
+          args: ["--eval", "process.exit(1)"],
+          timeoutMs: 5_000,
+        },
+      ],
     });
 
     const created = await request(app)
@@ -120,7 +142,7 @@ describe("RepoMedic API bootstrap", () => {
 
     expect(approved.status).toBe(200);
     expect(approved.body.status).toBe("failed");
-    expect(approved.body.result.finalStatus).toBe("failed");
+    expect(approved.body.result.finalStatus).toBe("reverted");
     expect(approved.body.result.attempts).toBe(1);
   });
 
@@ -177,7 +199,7 @@ describe("RepoMedic API bootstrap", () => {
 
     const authorized = await request(app)
       .get("/v1/repairs")
-      .set("Authorization", "Bearer local-test-token");
+      .set("Authorization", "bearer local-test-token");
     expect(authorized.status).toBe(200);
   });
 
@@ -219,7 +241,17 @@ describe("RepoMedic API bootstrap", () => {
     }
   });
 
-  it("marks an interrupted persisted run as failed instead of leaving it running", async () => {
+  it("rejects an in-repository store outside the protected state directory", () => {
+    expect(
+      () =>
+        new FileRepairRunStore({
+          dataDir: join(process.cwd(), "state"),
+          repositoryRoot: process.cwd(),
+        }),
+    ).toThrow("must be under .repomedic");
+  });
+
+  it("marks an interrupted persisted run as recovery-required instead of leaving it running", async () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "repomedic-api-recovery-"),
     );
@@ -258,11 +290,24 @@ describe("RepoMedic API bootstrap", () => {
       );
 
       expect(recovered.status).toBe(200);
-      expect(recovered.body.status).toBe("failed");
+      expect(recovered.body.status).toBe("recovery-required");
       expect(recovered.body.error).toContain("API restarted");
       expect(recovered.body.result.finalStatus).toBe("failed");
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("discovers the git root from a workspace package directory", () => {
+    const previous = process.env["REPOMEDIC_REPO_ROOT"];
+    delete process.env["REPOMEDIC_REPO_ROOT"];
+    try {
+      expect(discoverRepositoryRoot(join(process.cwd(), "apps", "api"))).toBe(
+        realpathSync(process.cwd()),
+      );
+    } finally {
+      if (previous === undefined) delete process.env["REPOMEDIC_REPO_ROOT"];
+      else process.env["REPOMEDIC_REPO_ROOT"] = previous;
     }
   });
 });

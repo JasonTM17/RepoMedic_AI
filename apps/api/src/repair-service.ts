@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
   existsSync,
+  closeSync,
+  fsyncSync,
   mkdirSync,
+  openSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -9,7 +12,15 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, normalize, resolve, sep } from "node:path";
+import {
+  dirname,
+  isAbsolute,
+  join,
+  normalize,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 
 import {
   approvalSchema,
@@ -19,6 +30,7 @@ import {
   repositoryTargetSchema,
   runBoundedRetry,
   runCoordinator,
+  preparePatchProposal,
   type Approval,
   type BoundedRetryResult,
   type CheckCommand,
@@ -60,6 +72,7 @@ export type RepairStatus =
   | "running"
   | "completed"
   | "rejected"
+  | "recovery-required"
   | "failed";
 
 export interface RepairRun {
@@ -109,6 +122,7 @@ const repairRunSchema = z
       "running",
       "completed",
       "rejected",
+      "recovery-required",
       "failed",
     ]),
     createdAt: z.string().min(1),
@@ -176,6 +190,19 @@ export class FileRepairRunStore implements RepairRunStore {
 
   constructor(options: FileRepairRunStoreOptions) {
     this.dataDir = resolve(options.dataDir);
+    const relativeDataDir = relative(
+      resolve(options.repositoryRoot),
+      this.dataDir,
+    ).replace(/\\/g, "/");
+    if (
+      isPathWithin(resolve(options.repositoryRoot), this.dataDir) &&
+      relativeDataDir !== ".repomedic" &&
+      !relativeDataDir.startsWith(".repomedic/")
+    ) {
+      throw new Error(
+        "Repair store dataDir inside the repository must be under .repomedic so agents cannot read its state.",
+      );
+    }
     this.filePath = join(this.dataDir, "repair-runs.v1.json");
     this.repositoryRoot = options.repositoryRoot;
     mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
@@ -240,6 +267,12 @@ export class FileRepairRunStore implements RepairRunStore {
         encoding: "utf8",
         mode: 0o600,
       });
+      const descriptor = openSync(temporaryPath, "r+");
+      try {
+        fsyncSync(descriptor);
+      } finally {
+        closeSync(descriptor);
+      }
       renameSync(temporaryPath, this.filePath);
     } catch (error) {
       try {
@@ -324,9 +357,11 @@ function canonicalDirectory(path: string, fieldName: string): string {
 
 function canonicalRootFromAncestors(start: string): string {
   let current = resolve(start);
+
+  // Prefer the nearest git root. Workspace packages may have their own
+  // package.json files, but they are not independent repository targets.
   while (true) {
     const gitPath = join(current, ".git");
-    const packagePath = join(current, "package.json");
     try {
       if (statSync(gitPath).isDirectory() || statSync(gitPath).isFile()) {
         return canonicalDirectory(current, "Repository root");
@@ -334,6 +369,17 @@ function canonicalRootFromAncestors(start: string): string {
     } catch {
       // Continue looking at the parent.
     }
+
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+
+  // A non-git source tree can still be discovered from its nearest package
+  // manifest as a conservative fallback.
+  current = resolve(start);
+  while (true) {
+    const packagePath = join(current, "package.json");
 
     try {
       if (statSync(packagePath).isFile()) {
@@ -351,9 +397,11 @@ function canonicalRootFromAncestors(start: string): string {
   return canonicalDirectory(start, "Repository root");
 }
 
-export function discoverRepositoryRoot(): string {
+export function discoverRepositoryRoot(start = process.cwd()): string {
   const configuredRoot = process.env["REPOMEDIC_REPO_ROOT"];
-  return canonicalRootFromAncestors(configuredRoot ?? process.cwd());
+  return configuredRoot === undefined
+    ? canonicalRootFromAncestors(start)
+    : canonicalDirectory(configuredRoot, "Configured repository root");
 }
 
 function isPathWithin(parent: string, child: string): boolean {
@@ -416,15 +464,16 @@ function recoverInterruptedRun(run: RepairRun): RepairRun {
 
   return {
     ...run,
-    status: "failed",
+    status: "recovery-required",
     updatedAt: now(),
     error:
-      "Repair run interrupted because the API restarted before completion.",
+      "Repair run interrupted because the API restarted before completion; operator recovery is required before any further mutation.",
     result: {
       success: false,
       attempts: 0,
       finalStatus: "failed",
-      summary: "The API restarted while this repair run was in progress.",
+      summary:
+        "The API restarted while this repair run was in progress. Inspect the worktree and decide recovery manually; no automatic continuation is allowed.",
     },
   };
 }
@@ -547,8 +596,9 @@ export class RepairService {
     this.remember(run);
 
     try {
+      const model = this.modelFactory({ backend: input.backend });
       const coordinatorResult = await runCoordinator({
-        model: this.modelFactory({ backend: input.backend }),
+        model,
         target,
         issueDescription: input.issueDescription,
         allowlist: input.allowlist,
@@ -561,6 +611,27 @@ export class RepairService {
         : null;
       run.explorerIterations = coordinatorResult.explorerIterations;
       run.stopped = coordinatorResult.stopped;
+
+      if (
+        run.proposal &&
+        coordinatorResult.issues.length > 0 &&
+        !input.dryRun
+      ) {
+        const candidate = await preparePatchProposal({
+          model,
+          proposal: run.proposal,
+          issues: run.issues,
+          allowlist: input.allowlist,
+          root: rootPath,
+        });
+        if (!candidate.success || !candidate.proposal) {
+          throw new Error(
+            candidate.error ??
+              "Patch author did not produce a valid immutable candidate.",
+          );
+        }
+        run.proposal = candidate.proposal;
+      }
 
       if (coordinatorResult.issues.length === 0 || input.dryRun) {
         run.status = "completed";
