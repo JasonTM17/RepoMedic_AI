@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM node:24-alpine AS build
+ARG NEXT_PUBLIC_REPOMEDIC_API_TOKEN
+ENV NEXT_PUBLIC_REPOMEDIC_API_TOKEN=${NEXT_PUBLIC_REPOMEDIC_API_TOKEN}
 WORKDIR /workspace
 
 COPY package.json package-lock.json tsconfig.base.json ./

@@ -4,9 +4,16 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     environment:
       - NODE_ENV=production
+      - HOST=0.0.0.0
+      - REPOMEDIC_REPO_ROOT=/workspace/repository
+      - REPOMEDIC_DATA_DIR=/workspace/repository/.repomedic/docker
+      - CORS_ORIGIN=http://localhost:3000
+      - REPOMEDIC_API_TOKEN=${REPOMEDIC_API_TOKEN:-}
+    volumes:
+      - .:/workspace/repository
     restart: unless-stopped
     healthcheck:
       test:
@@ -27,8 +34,10 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_REPOMEDIC_API_TOKEN: ${REPOMEDIC_API_TOKEN:-}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NODE_ENV=production
     restart: unless-stopped

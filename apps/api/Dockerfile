@@ -22,12 +22,15 @@ LABEL org.opencontainers.image.source="https://github.com/JasonTM17/RepoMedic_AI
   org.opencontainers.image.revision="${VCS_REF}"
 WORKDIR /app
 RUN addgroup -S repomedic && adduser -S -G repomedic -u 65532 repomedic
+RUN mkdir -p /workspace && ln -s /app/node_modules /workspace/node_modules
 COPY --from=build /workspace/node_modules ./node_modules
 COPY --from=build /workspace/packages/core ./packages/core
 COPY --from=build /workspace/packages/api-client ./packages/api-client
 COPY --from=build /workspace/apps/api/package.json ./package.json
 COPY --from=build /workspace/apps/api/dist ./dist
 USER 65532:65532
+ENV PATH="/workspace/node_modules/.bin:/app/node_modules/.bin:${PATH}"
+ENV HOST=0.0.0.0
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:4000/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
 CMD ["node", "dist/server.js"]
