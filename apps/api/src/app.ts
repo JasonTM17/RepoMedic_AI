@@ -176,6 +176,13 @@ export function createApp(options: CreateAppOptions = {}) {
   });
 
   app.get("/readyz", (_request, response) => {
+    if (service.persistenceWarning !== undefined) {
+      response.status(503).json({
+        code: "PERSISTENCE_RECOVERY_REQUIRED",
+        message: service.persistenceWarning,
+      });
+      return;
+    }
     response.status(200).json({ status: "ready" });
   });
 

@@ -1,4 +1,15 @@
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  readdirSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -39,6 +50,37 @@ function createTestApp(
     persistence: "memory",
     ...options,
   });
+}
+
+function persistedRun(id: string): RepairRun {
+  const rootPath = realpathSync(process.cwd());
+  const timestamp = new Date(0).toISOString();
+  return {
+    id,
+    status: "completed",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    request: {
+      issueDescription: `Persist ${id}`,
+      rootPath,
+      allowlist: ["."],
+      backend: "fake",
+      maxRetries: 3,
+      dryRun: false,
+    },
+    target: { rootPath },
+    issues: [],
+    proposal: null,
+    approval: null,
+    result: {
+      success: true,
+      attempts: 0,
+      finalStatus: "no-op",
+      summary: "No changes were required.",
+    },
+    explorerIterations: 0,
+    stopped: "done",
+  };
 }
 
 describe("RepoMedic API bootstrap", () => {
@@ -239,6 +281,89 @@ describe("RepoMedic API bootstrap", () => {
       expect(restored.body.result.summary).toContain(
         "without actionable issues",
       );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("merges independent store snapshots and refuses a locked writer", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "repomedic-api-lock-"));
+    const dataDir = join(temporaryRoot, "store");
+    const first = new FileRepairRunStore({
+      dataDir,
+      repositoryRoot: process.cwd(),
+    });
+    const second = new FileRepairRunStore({
+      dataDir,
+      repositoryRoot: process.cwd(),
+    });
+
+    try {
+      first.load();
+      second.load();
+      first.save([persistedRun("repair-first")]);
+      second.save([persistedRun("repair-second")]);
+
+      const restored = new FileRepairRunStore({
+        dataDir,
+        repositoryRoot: process.cwd(),
+      }).load();
+      expect(restored.map((run) => run.id).sort()).toEqual([
+        "repair-first",
+        "repair-second",
+      ]);
+
+      const lockDescriptor = openSync(
+        join(dataDir, "repair-runs.v1.lock"),
+        "wx",
+      );
+      try {
+        expect(() => second.save([persistedRun("repair-second")])).toThrow(
+          "locked by another process",
+        );
+      } finally {
+        closeSync(lockDescriptor);
+        unlinkSync(join(dataDir, "repair-runs.v1.lock"));
+      }
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("quarantines corrupt state and blocks mutation until recovery", async () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "repomedic-api-corrupt-store-"),
+    );
+    const dataDir = join(temporaryRoot, "store");
+
+    try {
+      const store = new FileRepairRunStore({
+        dataDir,
+        repositoryRoot: process.cwd(),
+      });
+      writeFileSync(store.filePath, "{not-json", "utf8");
+
+      const app = createApp({
+        repositoryRoot: process.cwd(),
+        dataDir,
+        modelFactory: queuedModelFactory(["DONE"]),
+      });
+      const ready = await request(app).get("/readyz");
+      expect(ready.status).toBe(503);
+      expect(ready.body.code).toBe("PERSISTENCE_RECOVERY_REQUIRED");
+
+      const create = await request(app).post("/v1/repairs").send({
+        issueDescription: "Do not mutate while persistence is quarantined",
+      });
+      expect(create.status).toBe(503);
+      expect(create.body.code).toBe("PERSISTENCE_RECOVERY_REQUIRED");
+
+      expect(
+        readdirSync(dataDir).some((name) =>
+          name.startsWith("repair-runs.v1.corrupt."),
+        ),
+      ).toBe(true);
+      expect(existsSync(store.filePath)).toBe(false);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

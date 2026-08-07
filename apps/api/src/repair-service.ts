@@ -156,9 +156,12 @@ const persistedRepairStateSchema = z
   })
   .strict();
 
+const REPAIR_STORE_LOCK_STALE_MS = 5 * 60 * 1_000;
+
 export interface RepairRunStore {
   load(): RepairRun[];
   save(runs: readonly RepairRun[]): void;
+  getRecoveryWarning?(): string | undefined;
 }
 
 export class MemoryRepairRunStore implements RepairRunStore {
@@ -186,7 +189,10 @@ export interface FileRepairRunStoreOptions {
 export class FileRepairRunStore implements RepairRunStore {
   readonly dataDir: string;
   readonly filePath: string;
+  readonly lockPath: string;
   private readonly repositoryRoot: string;
+  private baselineRuns: RepairRun[] = [];
+  private recoveryWarning: string | undefined;
 
   constructor(options: FileRepairRunStoreOptions) {
     this.dataDir = resolve(options.dataDir);
@@ -208,11 +214,101 @@ export class FileRepairRunStore implements RepairRunStore {
       );
     }
     this.filePath = join(this.dataDir, "repair-runs.v1.json");
+    this.lockPath = join(this.dataDir, "repair-runs.v1.lock");
     this.repositoryRoot = options.repositoryRoot;
     mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
   }
 
   load(): RepairRun[] {
+    try {
+      const runs = this.readPersistedRuns();
+      this.baselineRuns = structuredClone(runs);
+      return structuredClone(runs);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const quarantinePath = this.quarantineState();
+      this.recoveryWarning = quarantinePath
+        ? `Repair store recovery is required: ${reason} The invalid state was quarantined at ${quarantinePath}.`
+        : `Repair store recovery is required: ${reason} The invalid state could not be quarantined; no mutations are allowed until it is inspected.`;
+      this.baselineRuns = [];
+      return [];
+    }
+  }
+
+  getRecoveryWarning(): string | undefined {
+    return this.recoveryWarning;
+  }
+
+  save(runs: readonly RepairRun[]): void {
+    if (this.recoveryWarning !== undefined) {
+      throw new Error(this.recoveryWarning);
+    }
+
+    let lockDescriptor: number | undefined;
+    let temporaryPath: string | undefined;
+    try {
+      lockDescriptor = this.acquireLock();
+      let currentRuns: RepairRun[];
+      try {
+        currentRuns = this.readPersistedRuns();
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        const quarantinePath = this.quarantineState();
+        this.recoveryWarning = quarantinePath
+          ? `Repair store recovery is required: ${reason} The invalid state was quarantined at ${quarantinePath}.`
+          : `Repair store recovery is required: ${reason} The invalid state could not be quarantined; no mutations are allowed until it is inspected.`;
+        throw new Error(this.recoveryWarning);
+      }
+
+      const mergedRuns = mergeRepairRunSnapshots(
+        this.baselineRuns,
+        currentRuns,
+        runs,
+      );
+      temporaryPath = join(
+        this.dataDir,
+        `.repair-runs.${process.pid}.${randomUUID()}.tmp`,
+      );
+      const state = JSON.stringify(
+        {
+          version: 1,
+          repositoryRoot: this.repositoryRoot,
+          runs: mergedRuns,
+        },
+        null,
+        2,
+      );
+
+      writeFileSync(temporaryPath, `${state}\n`, {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      const descriptor = openSync(temporaryPath, "r+");
+      try {
+        fsyncSync(descriptor);
+      } finally {
+        closeSync(descriptor);
+      }
+      renameSync(temporaryPath, this.filePath);
+      syncDirectory(this.dataDir);
+      this.baselineRuns = structuredClone(mergedRuns);
+    } catch (error) {
+      if (temporaryPath !== undefined) {
+        try {
+          unlinkSync(temporaryPath);
+        } catch {
+          // Preserve the original persistence error.
+        }
+      }
+      throw new Error(
+        `Unable to persist the repair store: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      if (lockDescriptor !== undefined) this.releaseLock(lockDescriptor);
+    }
+  }
+
+  private readPersistedRuns(): RepairRun[] {
     if (!existsSync(this.filePath)) return [];
 
     let raw: string;
@@ -228,15 +324,13 @@ export class FileRepairRunStore implements RepairRunStore {
     try {
       parsed = JSON.parse(raw) as unknown;
     } catch {
-      throw new Error(
-        `Repair store ${this.filePath} is not valid JSON; move it aside before restarting.`,
-      );
+      throw new Error(`Repair store ${this.filePath} is not valid JSON.`);
     }
 
     const state = persistedRepairStateSchema.safeParse(parsed);
     if (!state.success) {
       throw new Error(
-        `Repair store ${this.filePath} failed schema validation; move it aside before restarting.`,
+        `Repair store ${this.filePath} failed schema validation.`,
       );
     }
     if (resolve(state.data.repositoryRoot) !== resolve(this.repositoryRoot)) {
@@ -251,43 +345,165 @@ export class FileRepairRunStore implements RepairRunStore {
     });
   }
 
-  save(runs: readonly RepairRun[]): void {
-    const temporaryPath = join(
+  private quarantineState(): string | undefined {
+    if (!existsSync(this.filePath)) return undefined;
+    const quarantinePath = join(
       this.dataDir,
-      `.repair-runs.${process.pid}.${randomUUID()}.tmp`,
+      `repair-runs.v1.corrupt.${Date.now()}.${randomUUID()}.json`,
     );
-    const state = JSON.stringify(
-      {
-        version: 1,
-        repositoryRoot: this.repositoryRoot,
-        runs,
-      },
-      null,
-      2,
-    );
+    try {
+      renameSync(this.filePath, quarantinePath);
+      return quarantinePath;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private acquireLock(): number {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const descriptor = openSync(this.lockPath, "wx", 0o600);
+        try {
+          writeFileSync(
+            descriptor,
+            JSON.stringify({ pid: process.pid, acquiredAt: now() }),
+            "utf8",
+          );
+          fsyncSync(descriptor);
+        } catch (error) {
+          closeSync(descriptor);
+          unlinkSync(this.lockPath);
+          throw error;
+        }
+        return descriptor;
+      } catch (error) {
+        const code =
+          error && typeof error === "object" && "code" in error
+            ? String((error as { code?: unknown }).code)
+            : undefined;
+        if (code === "EEXIST" && this.removeStaleLock()) continue;
+        if (code === "EEXIST") {
+          throw new Error(
+            `Repair store is locked by another process: ${this.lockPath}.`,
+          );
+        }
+        throw error;
+      }
+    }
+
+    throw new Error(`Unable to acquire repair store lock: ${this.lockPath}.`);
+  }
+
+  private removeStaleLock(): boolean {
+    let modifiedAt: number;
+    try {
+      modifiedAt = statSync(this.lockPath).mtimeMs;
+    } catch {
+      return false;
+    }
+    if (Date.now() - modifiedAt < REPAIR_STORE_LOCK_STALE_MS) return false;
+
+    let pid: number | undefined;
+    try {
+      const lock = JSON.parse(readFileSync(this.lockPath, "utf8")) as {
+        pid?: unknown;
+      };
+      if (typeof lock.pid === "number" && Number.isSafeInteger(lock.pid)) {
+        pid = lock.pid;
+      }
+    } catch {
+      // An old malformed lock can be removed after the stale interval.
+    }
+
+    if (pid !== undefined) {
+      try {
+        process.kill(pid, 0);
+        return false;
+      } catch (error) {
+        const code =
+          error && typeof error === "object" && "code" in error
+            ? String((error as { code?: unknown }).code)
+            : undefined;
+        if (code !== "ESRCH") return false;
+      }
+    }
 
     try {
-      writeFileSync(temporaryPath, `${state}\n`, {
-        encoding: "utf8",
-        mode: 0o600,
-      });
-      const descriptor = openSync(temporaryPath, "r+");
-      try {
-        fsyncSync(descriptor);
-      } finally {
-        closeSync(descriptor);
-      }
-      renameSync(temporaryPath, this.filePath);
-    } catch (error) {
-      try {
-        unlinkSync(temporaryPath);
-      } catch {
-        // Preserve the original persistence error.
-      }
-      throw new Error(
-        `Unable to persist the repair store: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      unlinkSync(this.lockPath);
+      return true;
+    } catch {
+      return false;
     }
+  }
+
+  private releaseLock(descriptor: number): void {
+    let closeError: unknown;
+    try {
+      closeSync(descriptor);
+    } catch (error) {
+      closeError = error;
+    }
+
+    let unlinkError: unknown;
+    try {
+      unlinkSync(this.lockPath);
+    } catch (error) {
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? String((error as { code?: unknown }).code)
+          : undefined;
+      if (code !== "ENOENT") unlinkError = error;
+    }
+
+    if (closeError !== undefined) throw closeError;
+    if (unlinkError !== undefined) throw unlinkError;
+  }
+}
+
+function sameRepairRun(left: RepairRun, right: RepairRun): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function mergeRepairRunSnapshots(
+  baselineRuns: readonly RepairRun[],
+  currentRuns: readonly RepairRun[],
+  incomingRuns: readonly RepairRun[],
+): RepairRun[] {
+  const baseline = new Map(baselineRuns.map((run) => [run.id, run]));
+  const current = new Map(currentRuns.map((run) => [run.id, run]));
+  const incoming = new Map(incomingRuns.map((run) => [run.id, run]));
+  const merged = new Map(current);
+
+  for (const [id, baselineRun] of baseline) {
+    const incomingRun = incoming.get(id);
+    const currentRun = current.get(id);
+    if (incomingRun === undefined) {
+      if (currentRun === undefined || sameRepairRun(currentRun, baselineRun)) {
+        merged.delete(id);
+      }
+      continue;
+    }
+    if (!sameRepairRun(incomingRun, baselineRun)) merged.set(id, incomingRun);
+  }
+
+  for (const [id, incomingRun] of incoming) {
+    if (!baseline.has(id)) merged.set(id, incomingRun);
+  }
+
+  return [...merged.values()];
+}
+
+function syncDirectory(directory: string): void {
+  if (process.platform === "win32") return;
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(directory, "r");
+    fsyncSync(descriptor);
+  } catch {
+    // Directory fsync is not supported by every filesystem; the file fsync
+    // and atomic rename still provide the portable durability boundary.
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
   }
 }
 
@@ -491,6 +707,7 @@ export class RepairService {
   private readonly maxExplorerIterations: number;
   private readonly maxStoredRuns: number;
   private readonly store: RepairRunStore;
+  private readonly initialPersistenceWarning: string | undefined;
   private readonly runs = new Map<string, RepairRun>();
 
   constructor(options: RepairServiceOptions) {
@@ -526,6 +743,7 @@ export class RepairService {
       });
 
     const loadedRuns = this.store.load();
+    this.initialPersistenceWarning = this.store.getRecoveryWarning?.();
     const recoveredRuns = loadedRuns.map(recoverInterruptedRun);
     for (const run of recoveredRuns) this.runs.set(run.id, run);
     this.trimRuns();
@@ -561,6 +779,7 @@ export class RepairService {
   }
 
   async create(input: RepairRequest): Promise<RepairRun> {
+    this.assertPersistenceReady();
     const rootPath = input.rootPath
       ? canonicalDirectory(input.rootPath, "rootPath")
       : this.repositoryRoot;
@@ -672,6 +891,7 @@ export class RepairService {
   }
 
   async decide(id: string, input: ApprovalRequest): Promise<RepairRun> {
+    this.assertPersistenceReady();
     const run = this.runs.get(id);
     if (!run) {
       throw new RepairServiceError(
@@ -756,5 +976,18 @@ export class RepairService {
 
   private persist(): void {
     this.store.save([...this.runs.values()]);
+  }
+
+  get persistenceWarning(): string | undefined {
+    return this.store.getRecoveryWarning?.() ?? this.initialPersistenceWarning;
+  }
+
+  private assertPersistenceReady(): void {
+    if (this.persistenceWarning === undefined) return;
+    throw new RepairServiceError(
+      503,
+      "PERSISTENCE_RECOVERY_REQUIRED",
+      this.persistenceWarning,
+    );
   }
 }
