@@ -30,9 +30,7 @@ function validationDetails(error: {
 
 function parseRequest<T>(
   schema: {
-    safeParse: (
-      value: unknown,
-    ) =>
+    safeParse: (value: unknown) =>
       | { success: true; data: T }
       | {
           success: false;
