@@ -72,6 +72,26 @@ export async function runBoundedRetry(
     };
   }
 
+  if (
+    proposal.operations.length > 0 &&
+    (proposal.digest === undefined ||
+      !/^[a-f0-9]{64}$/.test(proposal.digest) ||
+      proposal.operations.some(
+        (operation) =>
+          operation.oldSha === undefined ||
+          operation.hunks === undefined ||
+          operation.hunks.length === 0,
+      ))
+  ) {
+    return {
+      success: false,
+      attempts: 0,
+      finalStatus: "failed",
+      summary:
+        "Workflow requires an immutable candidate with a valid digest, old-file preconditions, and exact diff hunks.",
+    };
+  }
+
   let attempt = 0;
   let previousFailures: string | undefined;
 

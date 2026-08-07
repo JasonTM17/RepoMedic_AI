@@ -11,6 +11,18 @@ import { patchOk } from "../src/tools/patch/patch-result.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../..");
+const immutablePatchDigest = "a".repeat(64);
+
+function immutableModifyOperation() {
+  return {
+    id: "op-0",
+    path: "file.txt",
+    kind: "modify" as const,
+    oldSha: "old",
+    newSha: "new",
+    hunks: ["@@ -1,1 +1,1 @@\n-old\n+new"],
+  };
+}
 
 describe("Bounded Retry Workflow", () => {
   afterEach(() => {
@@ -56,7 +68,7 @@ describe("Bounded Retry Workflow", () => {
     expect(result.finalStatus).toBe("no-op");
   });
 
-  it("fails when a non-empty proposal is completed without applying a change", async () => {
+  it("rejects a non-empty proposal without immutable candidate metadata", async () => {
     const proposal: PatchProposal = {
       id: "p1",
       target: { rootPath: repoRoot },
@@ -75,8 +87,9 @@ describe("Bounded Retry Workflow", () => {
     });
 
     expect(result.success).toBe(false);
+    expect(result.attempts).toBe(0);
     expect(result.finalStatus).toBe("failed");
-    expect(result.summary).toContain("non-empty proposal");
+    expect(result.summary).toContain("immutable candidate");
   });
 
   it("rejects an invalid retry bound before invoking the model", async () => {
@@ -131,15 +144,14 @@ describe("Bounded Retry Workflow", () => {
     const proposal: PatchProposal = {
       id: "p1",
       target: { rootPath: repoRoot },
-      operations: [{ id: "op-0", path: "file.txt", kind: "modify" }],
+      operations: [immutableModifyOperation()],
       status: "draft",
       humanApprovalRequired: true,
+      digest: immutablePatchDigest,
     };
 
     const result = await runBoundedRetry({
-      model: new FakeModelAdapter([
-        `PATCH:\n--- a/file.txt\n+++ b/file.txt\n@@ -1,1 +1,1 @@\n-old\n+new`,
-      ]),
+      model: new FakeModelAdapter(["DONE"]),
       proposal,
       issues: [],
       approved: true,
@@ -165,16 +177,14 @@ describe("Bounded Retry Workflow", () => {
     const proposal: PatchProposal = {
       id: "p1",
       target: { rootPath: repoRoot },
-      operations: [{ id: "op-0", path: "file.txt", kind: "modify" }],
+      operations: [immutableModifyOperation()],
       status: "draft",
       humanApprovalRequired: true,
+      digest: immutablePatchDigest,
     };
 
     const result = await runBoundedRetry({
-      model: new FakeModelAdapter([
-        `PATCH:\n--- a/file.txt\n+++ b/file.txt\n@@ -1,1 +1,1 @@\n-old\n+new`,
-        `PATCH:\n--- a/file.txt\n+++ b/file.txt\n@@ -1,1 +1,1 @@\n-old\n+new`,
-      ]),
+      model: new FakeModelAdapter([]),
       proposal,
       issues: [],
       approved: true,
@@ -191,8 +201,10 @@ describe("Bounded Retry Workflow", () => {
       ],
     });
     expect(result.success).toBe(false);
-    expect(result.attempts).toBe(2);
+    expect(result.attempts).toBe(1);
     expect(result.finalStatus).toBe("reverted");
-    expect(result.summary).toContain("Max retries (2) exceeded");
+    expect(result.summary).toContain(
+      "new candidate requires a new human approval",
+    );
   });
 });
