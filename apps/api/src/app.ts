@@ -1,11 +1,116 @@
 import express, { type ErrorRequestHandler } from "express";
 
+import {
+  approvalRequestSchema,
+  discoverRepositoryRoot,
+  RepairService,
+  RepairServiceError,
+  repairRequestSchema,
+  type ModelFactory,
+  type RepairServiceOptions,
+} from "./repair-service.js";
+
+export interface CreateAppOptions {
+  repositoryRoot?: string;
+  service?: RepairService;
+  modelFactory?: ModelFactory;
+  checksToRun?: RepairServiceOptions["checksToRun"];
+  maxExplorerIterations?: number;
+  maxStoredRuns?: number;
+}
+
+function validationDetails(error: {
+  issues: Array<{ path: PropertyKey[]; message: string }>;
+}) {
+  return error.issues.map((issue) => ({
+    path: issue.path.map(String).join("."),
+    message: issue.message,
+  }));
+}
+
+function parseRequest<T>(
+  schema: {
+    safeParse: (
+      value: unknown,
+    ) =>
+      | { success: true; data: T }
+      | {
+          success: false;
+          error: { issues: Array<{ path: PropertyKey[]; message: string }> };
+        };
+  },
+  body: unknown,
+  name: string,
+): T {
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    throw new RepairServiceError(
+      400,
+      "INVALID_REQUEST",
+      `${name} is invalid.`,
+      validationDetails(parsed.error),
+    );
+  }
+  return parsed.data;
+}
+
+function installCors(app: express.Express): void {
+  const allowedOrigins = (process.env["CORS_ORIGIN"] ?? "http://localhost:3000")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  app.use((request, response, next) => {
+    const origin = request.header("origin");
+    const isAllowed = origin === undefined || allowedOrigins.includes(origin);
+
+    if (origin !== undefined) response.vary("Origin");
+    if (origin !== undefined && isAllowed) {
+      response.setHeader("Access-Control-Allow-Origin", origin);
+      response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+      response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    }
+
+    if (request.method === "OPTIONS") {
+      if (!isAllowed) {
+        response.status(403).json({
+          code: "CORS_ORIGIN_DENIED",
+          message: "The request origin is not allowed.",
+        });
+        return;
+      }
+      response.status(204).end();
+      return;
+    }
+
+    next();
+  });
+}
+
 /** Creates the HTTP application without binding a network port. */
-export function createApp() {
+export function createApp(options: CreateAppOptions = {}) {
   const app = express();
+  const service =
+    options.service ??
+    new RepairService({
+      repositoryRoot: options.repositoryRoot ?? discoverRepositoryRoot(),
+      ...(options.modelFactory !== undefined
+        ? { modelFactory: options.modelFactory }
+        : {}),
+      ...(options.checksToRun !== undefined
+        ? { checksToRun: options.checksToRun }
+        : {}),
+      ...(options.maxExplorerIterations !== undefined
+        ? { maxExplorerIterations: options.maxExplorerIterations }
+        : {}),
+      ...(options.maxStoredRuns !== undefined
+        ? { maxStoredRuns: options.maxStoredRuns }
+        : {}),
+    });
 
   app.disable("x-powered-by");
   app.use(express.json({ limit: "32kb" }));
+  installCors(app);
 
   app.get("/healthz", (_request, response) => {
     response.status(200).json({ status: "ok" });
@@ -20,6 +125,35 @@ export function createApp() {
       .status(200)
       .type("text/plain")
       .send('repomedic_api_info{service="api"} 1\n');
+  });
+
+  app.post("/v1/repairs", async (request, response) => {
+    const input = parseRequest(
+      repairRequestSchema,
+      request.body,
+      "Repair request",
+    );
+    const run = await service.create(input);
+    response.status(201).json(run);
+  });
+
+  app.get("/v1/repairs", (_request, response) => {
+    const items = service.list();
+    response.status(200).json({ items, total: items.length });
+  });
+
+  app.get("/v1/repairs/:repairId", (request, response) => {
+    response.status(200).json(service.get(request.params.repairId));
+  });
+
+  app.post("/v1/repairs/:repairId/approval", async (request, response) => {
+    const input = parseRequest(
+      approvalRequestSchema,
+      request.body,
+      "Approval request",
+    );
+    const run = await service.decide(request.params.repairId, input);
+    response.status(200).json(run);
   });
 
   const errorHandler: ErrorRequestHandler = (
@@ -38,6 +172,16 @@ export function createApp() {
       response
         .status(400)
         .json({ code: "INVALID_JSON", message: "Invalid JSON body" });
+      return;
+    }
+
+    if (error instanceof RepairServiceError) {
+      const payload = {
+        code: error.code,
+        message: error.message,
+        ...(error.details !== undefined ? { details: error.details } : {}),
+      };
+      response.status(error.statusCode).json(payload);
       return;
     }
 

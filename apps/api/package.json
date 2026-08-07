@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "express": "^5.1.0"
+    "@jasonTM17/core": "0.1.0",
+    "express": "^5.1.0",
+    "zod": "^4.4.3"
   }
 }
