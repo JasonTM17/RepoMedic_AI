@@ -58,7 +58,7 @@
     "eslint": "^10.8.0",
     "prettier": "^3.5.3",
     "supertest": "^7.1.1",
-    "tsx": "^4.19.4",
+    "tsx": "^4.23.12",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.35.0",
     "vitest": "^3.2.7"
